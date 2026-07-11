@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app.models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
 from app import storage
+from app.business_rules import validate_status_transition
 
 # Load environment variables from a local .env file if present.
 load_dotenv()
@@ -56,7 +57,19 @@ def get_task(task_id: str) -> TaskResponse:
 
 @app.patch("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
 def update_task(task_id: str, payload: TaskUpdate) -> TaskResponse:
-    """Update an existing task by delegating to the storage layer."""
+    """Update an existing task by delegating to the storage layer.
+
+    Behavior changes:
+    - If payload.status is None, skip transition validation.
+    - If payload.status is provided, validate the transition against business rules.
+    """
+    # Only validate transitions when a new status is provided.
+    if payload.status is not None:
+        existing = storage.get_task_by_id(task_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+        validate_status_transition(existing.status, payload.status)
+
     updated = storage.update_task(task_id, payload)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
