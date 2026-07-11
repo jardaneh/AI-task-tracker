@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi import status
 
-from app.models import TaskCreate, TaskResponse
+from app.models import TaskCreate, TaskResponse, TaskStatus, TaskPriority
 from app import storage
 
 # Load environment variables from a local .env file if present.
@@ -37,3 +37,8 @@ def create_task(payload: TaskCreate) -> TaskResponse:
     unknown fields) is handled by Pydantic via the TaskCreate schema.
     """
     return storage.add_task(payload)
+
+@app.get("/tasks", response_model=list[TaskResponse], tags=["tasks"])
+def list_tasks(status: TaskStatus | None = None, priority: TaskPriority | None = None) -> list[TaskResponse]:
+    """Return a list of tasks, optionally filtered by status and/or priority."""
+    return storage.get_all_tasks(status=status, priority=priority)
