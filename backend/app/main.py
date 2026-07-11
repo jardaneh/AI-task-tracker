@@ -3,6 +3,10 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi import status
+
+from app.models import TaskCreate, TaskResponse
+from app import storage
 
 # Load environment variables from a local .env file if present.
 load_dotenv()
@@ -23,3 +27,13 @@ def health_check():
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"])
+def create_task(payload: TaskCreate) -> TaskResponse:
+    """Create a new task by delegating to the storage layer.
+
+    Validation (missing/blank/too long title, invalid status/priority,
+    unknown fields) is handled by Pydantic via the TaskCreate schema.
+    """
+    return storage.add_task(payload)
