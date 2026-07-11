@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi import status
+from fastapi import HTTPException
 
 from app.models import TaskCreate, TaskResponse, TaskStatus, TaskPriority
 from app import storage
@@ -42,3 +43,12 @@ def create_task(payload: TaskCreate) -> TaskResponse:
 def list_tasks(status: TaskStatus | None = None, priority: TaskPriority | None = None) -> list[TaskResponse]:
     """Return a list of tasks, optionally filtered by status and/or priority."""
     return storage.get_all_tasks(status=status, priority=priority)
+
+
+@app.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
+def get_task(task_id: str) -> TaskResponse:
+    """Return a single task by id or raise 404 if not found."""
+    task = storage.get_task_by_id(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+    return task
