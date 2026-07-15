@@ -5,14 +5,169 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Task Board</title>
     <style>
-        /* Copilot will help us build the visual system here. */
+        :root {
+            color-scheme: light;
+            font-family: Inter, "Segoe UI", Roboto, sans-serif;
+            --surface: #f8fafc;
+            --surface-strong: #ffffff;
+            --border: #dfe7f1;
+            --text: #0f172a;
+            --muted: #64748b;
+            --accent: #2563eb;
+            --accent-soft: #dbeafe;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+            color: var(--text);
+        }
+
+        .app-header {
+            padding: 2rem 1.5rem 1rem;
+        }
+
+        .app-header h1 {
+            margin: 0 0 0.35rem;
+            font-size: 2rem;
+        }
+
+        .app-header p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 1rem;
+        }
+
+        main {
+            padding: 0 1.5rem 2rem;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(220px, 1fr));
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .board-column {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1rem;
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+        }
+
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .column-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .column-count {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-radius: 999px;
+            padding: 0.25rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        .task-card {
+            background: var(--surface-strong);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.9rem;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        }
+
+        .task-title {
+            margin: 0 0 0.35rem;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .task-description {
+            margin: 0 0 0.75rem;
+            color: var(--muted);
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .task-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .task-pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: #f1f5f9;
+            color: #334155;
+        }
+
+        .priority-high {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .priority-medium {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .priority-low {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .edit-button {
+            border: none;
+            border-radius: 999px;
+            background: var(--accent);
+            color: #ffffff;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .edit-button:hover {
+            background: #1d4ed8;
+        }
+
+        @media (max-width: 840px) {
+            .board {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
   <header class="app-header">
     <div>
-        <h1>Task Board</h1>
-        <p>Drag tasks between columns to update their status.</p>
+        <h1>Task Tracker</h1>
+        <p>Keep work moving across planning, active delivery, and completed tasks.</p>
     </div>
   </header>
 
@@ -32,6 +187,120 @@
 
     let tasks = [];
     let boardState = "loading";
+
+    const sampleTasks = [
+        {
+            id: 1,
+            title: "Draft onboarding checklist",
+            description: "Prepare the first milestone outline for the team.",
+            priority: "High",
+            assignee: "Alicia",
+            status: "ToDo"
+        },
+        {
+            id: 2,
+            title: "Implement task filter UI",
+            description: "Add a basic filter panel for the board.",
+            priority: "Medium",
+            assignee: "Jordan",
+            status: "InProgress"
+        },
+        {
+            id: 3,
+            title: "Ship beta release notes",
+            description: "Compile highlights and known issues for launch.",
+            priority: "Low",
+            assignee: "Unassigned",
+            status: "Done"
+        }
+    ];
+
+    function createElement(tagName, className) {
+        const element = document.createElement(tagName);
+        if (className) {
+            element.className = className;
+        }
+        return element;
+    }
+
+    function createTaskCard(task) {
+        const card = createElement("article", "task-card");
+        card.dataset.taskId = String(task.id);
+
+        const title = createElement("h3", "task-title");
+        title.textContent = task.title;
+        card.appendChild(title);
+
+        if (task.description) {
+            const description = createElement("p", "task-description");
+            description.textContent = task.description;
+            card.appendChild(description);
+        }
+
+        const meta = createElement("div", "task-meta");
+
+        const priority = createElement("span", `task-pill priority-${task.priority.toLowerCase()}`);
+        priority.textContent = task.priority;
+        meta.appendChild(priority);
+
+        const assignee = createElement("span", "task-pill");
+        assignee.textContent = task.assignee || "Unassigned";
+        meta.appendChild(assignee);
+
+        card.appendChild(meta);
+
+        const editButton = createElement("button", "edit-button");
+        editButton.type = "button";
+        editButton.textContent = "Edit";
+        card.appendChild(editButton);
+
+        return card;
+    }
+
+    function createColumn(status) {
+        const column = createElement("section", "board-column");
+        column.dataset.status = status;
+
+        const header = createElement("div", "column-header");
+        const title = createElement("h2", "column-title");
+        title.textContent = STATUS_LABELS[status];
+        header.appendChild(title);
+
+        const count = createElement("span", "column-count");
+        count.textContent = String(getTasksForStatus(status).length);
+        header.appendChild(count);
+
+        column.appendChild(header);
+
+        const taskList = document.createDocumentFragment();
+        getTasksForStatus(status).forEach((task) => {
+            taskList.appendChild(createTaskCard(task));
+        });
+
+        column.appendChild(taskList);
+        return column;
+    }
+
+    function getTasksForStatus(status) {
+        return tasks.filter((task) => task.status === status);
+    }
+
+    function renderBoard() {
+        const board = document.getElementById("board");
+        board.replaceChildren();
+
+        STATUSES.forEach((status) => {
+            board.appendChild(createColumn(status));
+        });
+    }
+
+    function initializeBoard() {
+        tasks = sampleTasks.map((task) => ({ ...task }));
+        boardState = "ready";
+        renderBoard();
+    }
+
+    initializeBoard();
   </script>
 </body>
 </html>
