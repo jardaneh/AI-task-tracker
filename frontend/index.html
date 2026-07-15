@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Board</title>
+    <style>
+        /* Copilot will help us build the visual system here. */
+    </style>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+        <h1>Task Board</h1>
+        <p>Drag tasks between columns to update their status.</p>
+    </div>
+  </header>
+
+  <main>
+    <section id="board" class="board" aria-live="polite"></section>
+  </main>
+
+  <script>
+    const API_BASE = "http://localhost:8000";
+    const STATUSES = ["ToDo", "InProgress", "Done"];
+    const STATUS_LABELS = {
+        ToDo: "To Do",
+        InProgress: "In Progress",
+        Done: "Done"
+    };
+    const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+
+    let tasks = [];
+    let boardState = "loading";
+  </script>
+</body>
+</html>
