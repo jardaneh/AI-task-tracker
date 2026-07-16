@@ -166,8 +166,8 @@
 <body>
   <header class="app-header">
     <div>
-        <h1>Task Tracker</h1>
-        <p>Keep work moving across planning, active delivery, and completed tasks.</p>
+        <h1>Task Board</h1>
+        <p>Drag tasks between columns to update their status.</p>
     </div>
   </header>
 
@@ -188,39 +188,37 @@
     let tasks = [];
     let boardState = "loading";
 
-    const sampleTasks = [
-        {
-            id: 1,
-            title: "Draft onboarding checklist",
-            description: "Prepare the first milestone outline for the team.",
-            priority: "High",
-            assignee: "Alicia",
-            status: "ToDo"
-        },
-        {
-            id: 2,
-            title: "Implement task filter UI",
-            description: "Add a basic filter panel for the board.",
-            priority: "Medium",
-            assignee: "Jordan",
-            status: "InProgress"
-        },
-        {
-            id: 3,
-            title: "Ship beta release notes",
-            description: "Compile highlights and known issues for launch.",
-            priority: "Low",
-            assignee: "Unassigned",
-            status: "Done"
-        }
-    ];
-
     function createElement(tagName, className) {
         const element = document.createElement(tagName);
         if (className) {
             element.className = className;
         }
         return element;
+    }
+
+    function getPriorityValue(priority) {
+        return PRIORITY_ORDER[priority] ?? Number.MAX_SAFE_INTEGER;
+    }
+
+    function compareTaskIds(leftTask, rightTask) {
+        const leftId = Number(leftTask.id);
+        const rightId = Number(rightTask.id);
+
+        if (!Number.isNaN(leftId) && !Number.isNaN(rightId)) {
+            return leftId - rightId;
+        }
+
+        return String(leftTask.id).localeCompare(String(rightTask.id));
+    }
+
+    function sortTasksForStatus(taskList) {
+        return [...taskList].sort((leftTask, rightTask) => {
+            const priorityDifference = getPriorityValue(leftTask.priority) - getPriorityValue(rightTask.priority);
+            if (priorityDifference !== 0) {
+                return priorityDifference;
+            }
+            return compareTaskIds(leftTask, rightTask);
+        });
     }
 
     function createTaskCard(task) {
@@ -239,7 +237,7 @@
 
         const meta = createElement("div", "task-meta");
 
-        const priority = createElement("span", `task-pill priority-${task.priority.toLowerCase()}`);
+        const priority = createElement("span", `task-pill priority-${String(task.priority).toLowerCase()}`);
         priority.textContent = task.priority;
         meta.appendChild(priority);
 
@@ -257,7 +255,7 @@
         return card;
     }
 
-    function createColumn(status) {
+    function createColumn(status, taskList) {
         const column = createElement("section", "board-column");
         column.dataset.status = status;
 
@@ -267,40 +265,55 @@
         header.appendChild(title);
 
         const count = createElement("span", "column-count");
-        count.textContent = String(getTasksForStatus(status).length);
+        count.textContent = String(taskList.length);
         header.appendChild(count);
 
         column.appendChild(header);
 
-        const taskList = document.createDocumentFragment();
-        getTasksForStatus(status).forEach((task) => {
-            taskList.appendChild(createTaskCard(task));
+        const taskListFragment = document.createDocumentFragment();
+        taskList.forEach((task) => {
+            taskListFragment.appendChild(createTaskCard(task));
         });
 
-        column.appendChild(taskList);
+        column.appendChild(taskListFragment);
         return column;
     }
 
-    function getTasksForStatus(status) {
-        return tasks.filter((task) => task.status === status);
-    }
+    function renderBoard(taskList) {
+        tasks = Array.isArray(taskList) ? taskList : [];
 
-    function renderBoard() {
         const board = document.getElementById("board");
         board.replaceChildren();
 
         STATUSES.forEach((status) => {
-            board.appendChild(createColumn(status));
+            const statusTasks = sortTasksForStatus(tasks.filter((task) => task.status === status));
+            board.appendChild(createColumn(status, statusTasks));
         });
     }
 
-    function initializeBoard() {
-        tasks = sampleTasks.map((task) => ({ ...task }));
-        boardState = "ready";
-        renderBoard();
+    async function fetchTasks() {
+        boardState = "loading";
+
+        try {
+            const response = await fetch(`${API_BASE}/tasks`);
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            const payload = await response.json();
+            const loadedTasks = Array.isArray(payload) ? payload : payload.tasks || [];
+            tasks = loadedTasks;
+            boardState = "ready";
+            renderBoard(tasks);
+        } catch (error) {
+            console.error("Unable to load tasks", error);
+            tasks = [];
+            boardState = "error";
+            renderBoard(tasks);
+        }
     }
 
-    initializeBoard();
+    fetchTasks();
   </script>
 </body>
 </html>
