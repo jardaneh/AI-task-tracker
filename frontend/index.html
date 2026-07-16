@@ -255,6 +255,53 @@
         return card;
     }
 
+    function createEmptyPlaceholder() {
+        const placeholder = createElement("div", "task-card");
+        placeholder.dataset.emptyPlaceholder = "true";
+
+        const message = createElement("p", "task-description");
+        message.textContent = "No tasks in this column yet.";
+        placeholder.appendChild(message);
+
+        return placeholder;
+    }
+
+    function createLoadingState() {
+        const stateCard = createElement("div", "task-card");
+
+        const title = createElement("h3", "task-title");
+        title.textContent = "Loading tasks…";
+        stateCard.appendChild(title);
+
+        const description = createElement("p", "task-description");
+        description.textContent = "Fetching the latest task board data.";
+        stateCard.appendChild(description);
+
+        return stateCard;
+    }
+
+    function createErrorState() {
+        const stateCard = createElement("div", "task-card");
+
+        const title = createElement("h3", "task-title");
+        title.textContent = "Unable to load tasks";
+        stateCard.appendChild(title);
+
+        const description = createElement("p", "task-description");
+        description.textContent = "The board could not be refreshed. Please try again.";
+        stateCard.appendChild(description);
+
+        const retryButton = createElement("button", "edit-button");
+        retryButton.type = "button";
+        retryButton.textContent = "Retry";
+        retryButton.addEventListener("click", () => {
+            fetchTasks();
+        });
+        stateCard.appendChild(retryButton);
+
+        return stateCard;
+    }
+
     function createColumn(status, taskList) {
         const column = createElement("section", "board-column");
         column.dataset.status = status;
@@ -271,9 +318,13 @@
         column.appendChild(header);
 
         const taskListFragment = document.createDocumentFragment();
-        taskList.forEach((task) => {
-            taskListFragment.appendChild(createTaskCard(task));
-        });
+        if (taskList.length === 0) {
+            taskListFragment.appendChild(createEmptyPlaceholder());
+        } else {
+            taskList.forEach((task) => {
+                taskListFragment.appendChild(createTaskCard(task));
+            });
+        }
 
         column.appendChild(taskListFragment);
         return column;
@@ -285,6 +336,16 @@
         const board = document.getElementById("board");
         board.replaceChildren();
 
+        if (boardState === "loading") {
+            board.appendChild(createLoadingState());
+            return;
+        }
+
+        if (boardState === "error") {
+            board.appendChild(createErrorState());
+            return;
+        }
+
         STATUSES.forEach((status) => {
             const statusTasks = sortTasksForStatus(tasks.filter((task) => task.status === status));
             board.appendChild(createColumn(status, statusTasks));
@@ -293,6 +354,7 @@
 
     async function fetchTasks() {
         boardState = "loading";
+        renderBoard(tasks);
 
         try {
             const response = await fetch(`${API_BASE}/tasks`);
@@ -303,7 +365,7 @@
             const payload = await response.json();
             const loadedTasks = Array.isArray(payload) ? payload : payload.tasks || [];
             tasks = loadedTasks;
-            boardState = "ready";
+            boardState = loadedTasks.length === 0 ? "empty" : "ready";
             renderBoard(tasks);
         } catch (error) {
             console.error("Unable to load tasks", error);
