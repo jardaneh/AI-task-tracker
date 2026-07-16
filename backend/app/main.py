@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi import status
 from fastapi import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
 from app import storage
@@ -19,6 +20,17 @@ app = FastAPI(
     title="Task Tracker API",
     description=f"Module 1 Task Tracker REST API - skeleton project (env: {APP_ENV})",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
