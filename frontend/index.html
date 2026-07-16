@@ -156,6 +156,26 @@
             background: #1d4ed8;
         }
 
+        .task-card.is-dragging {
+            opacity: 0.65;
+            transform: rotate(2deg);
+        }
+
+        .board-column.drag-over {
+            outline: 2px dashed var(--accent);
+            background: #eff6ff;
+        }
+
+        .board-feedback {
+            margin-bottom: 0.75rem;
+            padding: 0.75rem 0.9rem;
+            border-radius: 12px;
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-size: 0.95rem;
+        }
+
         @media (max-width: 840px) {
             .board {
                 grid-template-columns: 1fr;
@@ -187,6 +207,8 @@
 
     let tasks = [];
     let boardState = "loading";
+    let feedbackMessage = "";
+    let draggedTaskId = null;
 
     function createElement(tagName, className) {
         const element = document.createElement(tagName);
@@ -221,9 +243,37 @@
         });
     }
 
+    function createFeedbackMessage(message) {
+        if (!message) {
+            return null;
+        }
+
+        const feedback = createElement("div", "board-feedback");
+        feedback.textContent = message;
+        return feedback;
+    }
+
     function createTaskCard(task) {
         const card = createElement("article", "task-card");
         card.dataset.taskId = String(task.id);
+        card.draggable = true;
+
+        card.addEventListener("dragstart", (event) => {
+            draggedTaskId = String(task.id);
+            card.classList.add("is-dragging");
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(task.id));
+            }
+        });
+
+        card.addEventListener("dragend", () => {
+            draggedTaskId = null;
+            card.classList.remove("is-dragging");
+            document.querySelectorAll(".board-column.drag-over").forEach((column) => {
+                column.classList.remove("drag-over");
+            });
+        });
 
         const title = createElement("h3", "task-title");
         title.textContent = task.title;
@@ -306,6 +356,37 @@
         const column = createElement("section", "board-column");
         column.dataset.status = status;
 
+        column.addEventListener("dragover", (event) => {
+            event.preventDefault();
+            column.classList.add("drag-over");
+        });
+
+        column.addEventListener("dragleave", (event) => {
+            if (!column.contains(event.relatedTarget)) {
+                column.classList.remove("drag-over");
+            }
+        });
+
+        column.addEventListener("drop", (event) => {
+            event.preventDefault();
+            column.classList.remove("drag-over");
+
+            if (!draggedTaskId) {
+                return;
+            }
+
+            const taskId = draggedTaskId;
+            const targetStatus = column.dataset.status;
+            const currentTask = tasks.find((task) => String(task.id) === String(taskId));
+
+            if (!currentTask || currentTask.status === targetStatus) {
+                draggedTaskId = null;
+                return;
+            }
+
+            updateTaskStatus(taskId, targetStatus);
+        });
+
         const header = createElement("div", "column-header");
         const title = createElement("h2", "column-title");
         title.textContent = STATUS_LABELS[status];
@@ -346,10 +427,98 @@
             return;
         }
 
+        const feedback = createFeedbackMessage(feedbackMessage);
+        if (feedback) {
+            board.appendChild(feedback);
+        }
+
         STATUSES.forEach((status) => {
             const statusTasks = sortTasksForStatus(tasks.filter((task) => task.status === status));
             board.appendChild(createColumn(status, statusTasks));
         });
+    }
+
+    async function readErrorMessage(response) {
+        const contentType = response.headers.get("content-type") || "";
+
+        if (contentType.includes("application/json")) {
+            try {
+                const payload = await response.json();
+                if (payload && typeof payload === "object") {
+                    if (typeof payload.detail === "string") {
+                        return payload.detail;
+                    }
+                    if (typeof payload.message === "string") {
+                        return payload.message;
+                    }
+                    if (typeof payload.error === "string") {
+                        return payload.error;
+                    }
+                }
+            } catch (error) {
+                console.error("Unable to parse error payload", error);
+            }
+        }
+
+        try {
+            const text = await response.text();
+            if (text) {
+                return text;
+            }
+        } catch (error) {
+            console.error("Unable to read error response", error);
+        }
+
+        return "The task could not be moved. Please try again.";
+    }
+
+    async function updateTaskStatus(taskId, targetStatus) {
+        const currentTask = tasks.find((task) => String(task.id) === String(taskId));
+        if (!currentTask || currentTask.status === targetStatus) {
+            return;
+        }
+
+        const previousTasks = tasks.map((task) => ({ ...task }));
+        const optimisticTasks = tasks.map((task) => {
+            if (String(task.id) === String(taskId)) {
+                return { ...task, status: targetStatus };
+            }
+            return task;
+        });
+
+        tasks = optimisticTasks;
+        feedbackMessage = "";
+        boardState = tasks.length === 0 ? "empty" : "ready";
+        renderBoard(tasks);
+
+        try {
+            const response = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ status: targetStatus })
+            });
+
+            if (!response.ok) {
+                tasks = previousTasks;
+                feedbackMessage = await readErrorMessage(response);
+                boardState = tasks.length === 0 ? "empty" : "ready";
+                renderBoard(tasks);
+                return;
+            }
+
+            feedbackMessage = "";
+            tasks = optimisticTasks;
+            boardState = tasks.length === 0 ? "empty" : "ready";
+            renderBoard(tasks);
+        } catch (error) {
+            console.error("Unable to update task status", error);
+            tasks = previousTasks;
+            feedbackMessage = "The task could not be moved because the server was unavailable. Please try again.";
+            boardState = tasks.length === 0 ? "empty" : "ready";
+            renderBoard(tasks);
+        }
     }
 
     async function fetchTasks() {
