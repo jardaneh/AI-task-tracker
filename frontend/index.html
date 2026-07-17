@@ -31,6 +31,13 @@
             padding: 2rem 1.5rem 1rem;
         }
 
+        .app-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
         .app-header h1 {
             margin: 0 0 0.35rem;
             font-size: 2rem;
@@ -42,8 +49,149 @@
             font-size: 1rem;
         }
 
+        .new-task-button {
+            min-width: 110px;
+        }
+
         main {
             padding: 0 1.5rem 2rem;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 50;
+        }
+
+        .modal.is-open {
+            display: flex;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+        }
+
+        .modal-panel {
+            position: relative;
+            width: min(100%, 560px);
+            background: var(--surface-strong);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1.25rem;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .modal-close-button {
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: 1.4rem;
+            cursor: pointer;
+        }
+
+        .task-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.85rem;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .form-field.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .form-field label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-field input,
+        .form-field textarea,
+        .form-field select {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.7rem 0.8rem;
+            font: inherit;
+            color: var(--text);
+            background: #ffffff;
+        }
+
+        .form-field textarea {
+            min-height: 96px;
+            resize: vertical;
+        }
+
+        .field-error {
+            min-height: 1rem;
+            font-size: 0.8rem;
+            color: #b91c1c;
+        }
+
+        .form-banner {
+            display: none;
+            padding: 0.75rem 0.85rem;
+            border-radius: 12px;
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-size: 0.95rem;
+        }
+
+        .form-banner.is-visible {
+            display: block;
+        }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        .secondary-button {
+            border: none;
+            border-radius: 999px;
+            background: #e2e8f0;
+            color: var(--text);
+            padding: 0.5rem 0.9rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .secondary-button:hover {
+            background: #cbd5e1;
         }
 
         .board {
@@ -186,15 +334,71 @@
 </head>
 <body>
   <header class="app-header">
-    <div>
-        <h1>Task Board</h1>
-        <p>Drag tasks between columns to update their status.</p>
+    <div class="app-header-content">
+        <div>
+            <h1>Task Board</h1>
+            <p>Drag tasks between columns to update their status.</p>
+        </div>
+        <button id="new-task-button" class="edit-button new-task-button" type="button">New Task</button>
     </div>
   </header>
 
   <main>
     <section id="board" class="board" aria-live="polite"></section>
   </main>
+
+  <div id="task-modal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="task-modal-title">
+    <div class="modal-overlay" data-close-modal="true"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="task-modal-title">New Task</h2>
+        <button id="modal-close-button" class="modal-close-button" type="button" aria-label="Close dialog">×</button>
+      </div>
+      <form id="task-form" class="task-form">
+        <input id="task-id" name="taskId" type="hidden" />
+        <div id="form-banner" class="form-banner" role="alert"></div>
+        <div class="form-grid">
+          <div class="form-field full-width">
+            <label for="task-title-input">Title</label>
+            <input id="task-title-input" name="title" type="text" maxlength="120" />
+            <div id="error-title" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="form-field full-width">
+            <label for="task-description-input">Description</label>
+            <textarea id="task-description-input" name="description"></textarea>
+            <div id="error-description" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="form-field">
+            <label for="task-status-select">Status</label>
+            <select id="task-status-select" name="status">
+              <option value="ToDo">To Do</option>
+              <option value="InProgress">In Progress</option>
+              <option value="Done">Done</option>
+            </select>
+            <div id="error-status" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="form-field">
+            <label for="task-priority-select">Priority</label>
+            <select id="task-priority-select" name="priority">
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+            <div id="error-priority" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="form-field full-width">
+            <label for="task-assignee-input">Assignee</label>
+            <input id="task-assignee-input" name="assignee" type="text" maxlength="80" />
+            <div id="error-assignee" class="field-error" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="modal-cancel-button" class="secondary-button" type="button" data-close-modal="true">Cancel</button>
+          <button class="edit-button" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     const API_BASE = "http://localhost:8000";
@@ -210,6 +414,25 @@
     let boardState = "loading";
     let feedbackMessage = "";
     let draggedTaskId = null;
+    let modalState = {
+        isOpen: false,
+        mode: "create",
+        taskId: null
+    };
+
+    const modal = document.getElementById("task-modal");
+    const modalTitle = document.getElementById("task-modal-title");
+    const modalCloseButton = document.getElementById("modal-close-button");
+    const modalCancelButton = document.getElementById("modal-cancel-button");
+    const modalForm = document.getElementById("task-form");
+    const modalTaskId = document.getElementById("task-id");
+    const modalTitleInput = document.getElementById("task-title-input");
+    const modalDescriptionInput = document.getElementById("task-description-input");
+    const modalStatusSelect = document.getElementById("task-status-select");
+    const modalPrioritySelect = document.getElementById("task-priority-select");
+    const modalAssigneeInput = document.getElementById("task-assignee-input");
+    const formBanner = document.getElementById("form-banner");
+    const newTaskButton = document.getElementById("new-task-button");
 
     function createElement(tagName, className) {
         const element = document.createElement(tagName);
@@ -301,6 +524,10 @@
         const editButton = createElement("button", "edit-button");
         editButton.type = "button";
         editButton.textContent = "Edit";
+        editButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openTaskModal("edit", task);
+        });
         card.appendChild(editButton);
 
         return card;
@@ -439,38 +666,176 @@
         });
     }
 
-    async function readErrorMessage(response) {
+    function clearFormErrors() {
+        document.querySelectorAll(".field-error").forEach((fieldError) => {
+            fieldError.textContent = "";
+        });
+        formBanner.textContent = "";
+        formBanner.classList.remove("is-visible");
+    }
+
+    function setFieldError(fieldName, message) {
+        const errorElement = document.getElementById(`error-${fieldName}`);
+        if (errorElement) {
+            errorElement.textContent = message;
+        }
+    }
+
+    function showFormBanner(message) {
+        if (!message) {
+            formBanner.textContent = "";
+            formBanner.classList.remove("is-visible");
+            return;
+        }
+
+        formBanner.textContent = message;
+        formBanner.classList.add("is-visible");
+    }
+
+    function resetTaskForm() {
+        modalForm.reset();
+        modalTaskId.value = "";
+        modalTitleInput.value = "";
+        modalDescriptionInput.value = "";
+        modalStatusSelect.value = "ToDo";
+        modalPrioritySelect.value = "Medium";
+        modalAssigneeInput.value = "";
+        clearFormErrors();
+    }
+
+    function closeTaskModal() {
+        modal.classList.remove("is-open");
+        modal.setAttribute("aria-hidden", "true");
+        modalState.isOpen = false;
+        modalState.mode = "create";
+        modalState.taskId = null;
+        resetTaskForm();
+    }
+
+    function openTaskModal(mode, task) {
+        modalState.isOpen = true;
+        modalState.mode = mode;
+        modalState.taskId = task ? String(task.id) : null;
+        modalTitle.textContent = mode === "edit" ? "Edit Task" : "New Task";
+        resetTaskForm();
+
+        if (mode === "edit" && task) {
+            modalTaskId.value = String(task.id);
+            modalTitleInput.value = task.title || "";
+            modalDescriptionInput.value = task.description || "";
+            modalStatusSelect.value = task.status || "ToDo";
+            modalPrioritySelect.value = task.priority || "Medium";
+            modalAssigneeInput.value = task.assignee || "";
+        }
+
+        modal.classList.add("is-open");
+        modal.setAttribute("aria-hidden", "false");
+        window.requestAnimationFrame(() => {
+            modalTitleInput.focus();
+        });
+    }
+
+    function getErrorMessage(payload) {
+        if (!payload || typeof payload !== "object") {
+            return "The task could not be saved. Please try again.";
+        }
+
+        if (Array.isArray(payload.detail)) {
+            const messages = payload.detail
+                .map((item) => {
+                    if (item && typeof item === "object") {
+                        if (typeof item.msg === "string") {
+                            return item.msg;
+                        }
+                        if (typeof item.message === "string") {
+                            return item.message;
+                        }
+                        if (typeof item.error === "string") {
+                            return item.error;
+                        }
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+
+            if (messages.length > 0) {
+                return messages.join(" ");
+            }
+        }
+
+        if (typeof payload.detail === "string") {
+            return payload.detail;
+        }
+        if (typeof payload.message === "string") {
+            return payload.message;
+        }
+        if (typeof payload.error === "string") {
+            return payload.error;
+        }
+
+        return "The task could not be saved. Please try again.";
+    }
+
+    function getFieldErrors(payload) {
+        if (!payload || typeof payload !== "object") {
+            return {};
+        }
+
+        if (!Array.isArray(payload.detail)) {
+            return {};
+        }
+
+        return payload.detail.reduce((fieldErrors, item) => {
+            if (!item || typeof item !== "object") {
+                return fieldErrors;
+            }
+
+            const location = Array.isArray(item.loc) ? item.loc : [];
+            const fieldName = typeof location[location.length - 1] === "string"
+                ? location[location.length - 1]
+                : null;
+            const errorMessage = typeof item.msg === "string"
+                ? item.msg
+                : typeof item.message === "string"
+                    ? item.message
+                    : typeof item.error === "string"
+                        ? item.error
+                        : null;
+
+            if (fieldName && errorMessage) {
+                fieldErrors[fieldName] = errorMessage;
+            }
+
+            return fieldErrors;
+        }, {});
+    }
+
+    async function readErrorPayload(response) {
         const contentType = response.headers.get("content-type") || "";
+        const fallbackMessage = "The task could not be saved. Please try again.";
 
         if (contentType.includes("application/json")) {
             try {
-                const payload = await response.json();
-                if (payload && typeof payload === "object") {
-                    if (typeof payload.detail === "string") {
-                        return payload.detail;
-                    }
-                    if (typeof payload.message === "string") {
-                        return payload.message;
-                    }
-                    if (typeof payload.error === "string") {
-                        return payload.error;
-                    }
-                }
+                const payload = await response.clone().json();
+                return {
+                    message: getErrorMessage(payload),
+                    fieldErrors: getFieldErrors(payload)
+                };
             } catch (error) {
                 console.error("Unable to parse error payload", error);
             }
         }
 
         try {
-            const text = await response.text();
+            const text = await response.clone().text();
             if (text) {
-                return text;
+                return { message: text, fieldErrors: {} };
             }
         } catch (error) {
             console.error("Unable to read error response", error);
         }
 
-        return "The task could not be moved. Please try again.";
+        return { message: fallbackMessage, fieldErrors: {} };
     }
 
     async function updateTaskStatus(taskId, targetStatus) {
@@ -503,7 +868,8 @@
 
             if (!response.ok) {
                 tasks = previousTasks;
-                feedbackMessage = await readErrorMessage(response);
+                const errorPayload = await readErrorPayload(response);
+                feedbackMessage = errorPayload.message;
                 boardState = tasks.length === 0 ? "empty" : "ready";
                 renderBoard(tasks);
                 return;
@@ -519,6 +885,76 @@
             feedbackMessage = "The task could not be moved because the server was unavailable. Please try again.";
             boardState = tasks.length === 0 ? "empty" : "ready";
             renderBoard(tasks);
+        }
+    }
+
+    async function submitTaskForm(event) {
+        event.preventDefault();
+        clearFormErrors();
+
+        const title = modalTitleInput.value.trim();
+        if (!title) {
+            setFieldError("title", "Title is required");
+            modalTitleInput.focus();
+            return;
+        }
+
+        const formPayload = {
+            title,
+            description: modalDescriptionInput.value,
+            status: modalStatusSelect.value,
+            priority: modalPrioritySelect.value,
+            assignee: modalAssigneeInput.value.trim() ? modalAssigneeInput.value.trim() : null
+        };
+
+        const isEdit = modalState.mode === "edit";
+        const requestUrl = isEdit
+            ? `${API_BASE}/tasks/${encodeURIComponent(modalTaskId.value || "")}`
+            : `${API_BASE}/tasks`;
+
+        try {
+            const response = await fetch(requestUrl, {
+                method: isEdit ? "PATCH" : "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(formPayload)
+            });
+
+            if (!response.ok) {
+                const errorPayload = await readErrorPayload(response);
+                if (response.status === 422) {
+                    const fieldErrors = errorPayload.fieldErrors || {};
+                    if (fieldErrors.title) {
+                        setFieldError("title", fieldErrors.title);
+                    }
+                    if (fieldErrors.description) {
+                        setFieldError("description", fieldErrors.description);
+                    }
+                    if (fieldErrors.status) {
+                        setFieldError("status", fieldErrors.status);
+                    }
+                    if (fieldErrors.priority) {
+                        setFieldError("priority", fieldErrors.priority);
+                    }
+                    if (fieldErrors.assignee) {
+                        setFieldError("assignee", fieldErrors.assignee);
+                    }
+                    if (!Object.keys(fieldErrors).length) {
+                        showFormBanner(errorPayload.message);
+                    }
+                } else {
+                    showFormBanner(errorPayload.message);
+                }
+                return;
+            }
+
+            closeTaskModal();
+            feedbackMessage = "";
+            await fetchTasks();
+        } catch (error) {
+            console.error("Unable to save task", error);
+            showFormBanner("The task could not be saved because the server was unavailable. Please try again.");
         }
     }
 
@@ -544,6 +980,34 @@
             renderBoard(tasks);
         }
     }
+
+    newTaskButton.addEventListener("click", () => {
+        openTaskModal("create");
+    });
+
+    modalCloseButton.addEventListener("click", () => {
+        closeTaskModal();
+    });
+
+    modalCancelButton.addEventListener("click", () => {
+        closeTaskModal();
+    });
+
+    document.querySelectorAll("[data-close-modal]").forEach((element) => {
+        element.addEventListener("click", (event) => {
+            if (event.target === element) {
+                closeTaskModal();
+            }
+        });
+    });
+
+    modalForm.addEventListener("submit", submitTaskForm);
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && modalState.isOpen) {
+            closeTaskModal();
+        }
+    });
 
     fetchTasks();
   </script>
