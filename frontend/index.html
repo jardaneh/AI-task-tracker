@@ -410,11 +410,11 @@
     };
     const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
 
-    let tasks = [];
-    let boardState = "loading";
-    let feedbackMessage = "";
-    let draggedTaskId = null;
-    let modalState = {
+    let taskCollection = [];
+    let boardDisplayState = "loading";
+    let feedbackNotice = "";
+    let draggedTaskIdentifier = null;
+    let modalViewState = {
         isOpen: false,
         mode: "create",
         taskId: null
@@ -457,14 +457,17 @@
         return String(leftTask.id).localeCompare(String(rightTask.id));
     }
 
+    function compareTasksByPriority(leftTask, rightTask) {
+        const priorityDifference = getPriorityValue(leftTask.priority) - getPriorityValue(rightTask.priority);
+        if (priorityDifference !== 0) {
+            return priorityDifference;
+        }
+
+        return compareTaskIds(leftTask, rightTask);
+    }
+
     function sortTasksForStatus(taskList) {
-        return [...taskList].sort((leftTask, rightTask) => {
-            const priorityDifference = getPriorityValue(leftTask.priority) - getPriorityValue(rightTask.priority);
-            if (priorityDifference !== 0) {
-                return priorityDifference;
-            }
-            return compareTaskIds(leftTask, rightTask);
-        });
+        return [...taskList].sort(compareTasksByPriority);
     }
 
     function createFeedbackMessage(message) {
@@ -477,27 +480,39 @@
         return feedback;
     }
 
+    function handleTaskCardDragStart(event) {
+        const cardElement = event.currentTarget;
+        draggedTaskIdentifier = String(cardElement.dataset.taskId);
+        cardElement.classList.add("is-dragging");
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", String(cardElement.dataset.taskId));
+        }
+    }
+
+    function handleTaskCardDragEnd(event) {
+        const cardElement = event.currentTarget;
+        draggedTaskIdentifier = null;
+        cardElement.classList.remove("is-dragging");
+        document.querySelectorAll(".board-column.drag-over").forEach(removeDragOverHighlight);
+    }
+
+    function removeDragOverHighlight(columnElement) {
+        columnElement.classList.remove("drag-over");
+    }
+
+    function handleTaskCardEditClick(event, task) {
+        event.stopPropagation();
+        openTaskModal("edit", task);
+    }
+
     function createTaskCard(task) {
         const card = createElement("article", "task-card");
         card.dataset.taskId = String(task.id);
         card.draggable = true;
 
-        card.addEventListener("dragstart", (event) => {
-            draggedTaskId = String(task.id);
-            card.classList.add("is-dragging");
-            if (event.dataTransfer) {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", String(task.id));
-            }
-        });
-
-        card.addEventListener("dragend", () => {
-            draggedTaskId = null;
-            card.classList.remove("is-dragging");
-            document.querySelectorAll(".board-column.drag-over").forEach((column) => {
-                column.classList.remove("drag-over");
-            });
-        });
+        card.ondragstart = handleTaskCardDragStart;
+        card.ondragend = handleTaskCardDragEnd;
 
         const title = createElement("h3", "task-title");
         title.textContent = task.title;
@@ -524,10 +539,9 @@
         const editButton = createElement("button", "edit-button");
         editButton.type = "button";
         editButton.textContent = "Edit";
-        editButton.addEventListener("click", (event) => {
-            event.stopPropagation();
-            openTaskModal("edit", task);
-        });
+        editButton.onclick = function handleTaskEditButtonClick(event) {
+            handleTaskCardEditClick(event, task);
+        };
         card.appendChild(editButton);
 
         return card;
@@ -572,48 +586,60 @@
         const retryButton = createElement("button", "edit-button");
         retryButton.type = "button";
         retryButton.textContent = "Retry";
-        retryButton.addEventListener("click", () => {
-            fetchTasks();
-        });
+        retryButton.onclick = handleTaskRefreshClick;
         stateCard.appendChild(retryButton);
 
         return stateCard;
+    }
+
+    function handleTaskRefreshClick() {
+        fetchTasks();
+    }
+
+    function handleBoardColumnDragOver(event) {
+        event.preventDefault();
+        event.currentTarget.classList.add("drag-over");
+    }
+
+    function handleBoardColumnDragLeave(event) {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+            event.currentTarget.classList.remove("drag-over");
+        }
+    }
+
+    function handleBoardColumnDrop(event) {
+        event.preventDefault();
+        const columnElement = event.currentTarget;
+        columnElement.classList.remove("drag-over");
+
+        if (!draggedTaskIdentifier) {
+            return;
+        }
+
+        const targetStatus = columnElement.dataset.status;
+        const currentTask = findTaskById(draggedTaskIdentifier);
+
+        if (!currentTask || currentTask.status === targetStatus) {
+            draggedTaskIdentifier = null;
+            return;
+        }
+
+        updateTaskStatus(draggedTaskIdentifier, targetStatus);
+    }
+
+    function findTaskById(taskIdentifier) {
+        return taskCollection.find(function findMatchingTask(task) {
+            return String(task.id) === String(taskIdentifier);
+        });
     }
 
     function createColumn(status, taskList) {
         const column = createElement("section", "board-column");
         column.dataset.status = status;
 
-        column.addEventListener("dragover", (event) => {
-            event.preventDefault();
-            column.classList.add("drag-over");
-        });
-
-        column.addEventListener("dragleave", (event) => {
-            if (!column.contains(event.relatedTarget)) {
-                column.classList.remove("drag-over");
-            }
-        });
-
-        column.addEventListener("drop", (event) => {
-            event.preventDefault();
-            column.classList.remove("drag-over");
-
-            if (!draggedTaskId) {
-                return;
-            }
-
-            const taskId = draggedTaskId;
-            const targetStatus = column.dataset.status;
-            const currentTask = tasks.find((task) => String(task.id) === String(taskId));
-
-            if (!currentTask || currentTask.status === targetStatus) {
-                draggedTaskId = null;
-                return;
-            }
-
-            updateTaskStatus(taskId, targetStatus);
-        });
+        column.ondragover = handleBoardColumnDragOver;
+        column.ondragleave = handleBoardColumnDragLeave;
+        column.ondrop = handleBoardColumnDrop;
 
         const header = createElement("div", "column-header");
         const title = createElement("h2", "column-title");
@@ -630,7 +656,7 @@
         if (taskList.length === 0) {
             taskListFragment.appendChild(createEmptyPlaceholder());
         } else {
-            taskList.forEach((task) => {
+            taskList.forEach(function appendTaskCard(task) {
                 taskListFragment.appendChild(createTaskCard(task));
             });
         }
@@ -640,38 +666,46 @@
     }
 
     function renderBoard(taskList) {
-        tasks = Array.isArray(taskList) ? taskList : [];
+        taskCollection = Array.isArray(taskList) ? taskList : [];
 
         const board = document.getElementById("board");
         board.replaceChildren();
 
-        if (boardState === "loading") {
+        if (boardDisplayState === "loading") {
             board.appendChild(createLoadingState());
             return;
         }
 
-        if (boardState === "error") {
+        if (boardDisplayState === "error") {
             board.appendChild(createErrorState());
             return;
         }
 
-        const feedback = createFeedbackMessage(feedbackMessage);
+        const feedback = createFeedbackMessage(feedbackNotice);
         if (feedback) {
             board.appendChild(feedback);
         }
 
-        STATUSES.forEach((status) => {
-            const statusTasks = sortTasksForStatus(tasks.filter((task) => task.status === status));
+        STATUSES.forEach(function appendStatusColumn(status) {
+            const statusTasks = sortTasksForStatus(taskCollection.filter(createTaskStatusFilter(status)));
             board.appendChild(createColumn(status, statusTasks));
         });
     }
 
+    function createTaskStatusFilter(status) {
+        return function filterTaskByStatus(task) {
+            return task.status === status;
+        };
+    }
+
     function clearFormErrors() {
-        document.querySelectorAll(".field-error").forEach((fieldError) => {
-            fieldError.textContent = "";
-        });
+        document.querySelectorAll(".field-error").forEach(resetFieldErrorMessage);
         formBanner.textContent = "";
         formBanner.classList.remove("is-visible");
+    }
+
+    function resetFieldErrorMessage(fieldError) {
+        fieldError.textContent = "";
     }
 
     function setFieldError(fieldName, message) {
@@ -706,16 +740,16 @@
     function closeTaskModal() {
         modal.classList.remove("is-open");
         modal.setAttribute("aria-hidden", "true");
-        modalState.isOpen = false;
-        modalState.mode = "create";
-        modalState.taskId = null;
+        modalViewState.isOpen = false;
+        modalViewState.mode = "create";
+        modalViewState.taskId = null;
         resetTaskForm();
     }
 
     function openTaskModal(mode, task) {
-        modalState.isOpen = true;
-        modalState.mode = mode;
-        modalState.taskId = task ? String(task.id) : null;
+        modalViewState.isOpen = true;
+        modalViewState.mode = mode;
+        modalViewState.taskId = task ? String(task.id) : null;
         modalTitle.textContent = mode === "edit" ? "Edit Task" : "New Task";
         resetTaskForm();
 
@@ -730,7 +764,7 @@
 
         modal.classList.add("is-open");
         modal.setAttribute("aria-hidden", "false");
-        window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(function focusTaskTitleInput() {
             modalTitleInput.focus();
         });
     }
@@ -742,20 +776,7 @@
 
         if (Array.isArray(payload.detail)) {
             const messages = payload.detail
-                .map((item) => {
-                    if (item && typeof item === "object") {
-                        if (typeof item.msg === "string") {
-                            return item.msg;
-                        }
-                        if (typeof item.message === "string") {
-                            return item.message;
-                        }
-                        if (typeof item.error === "string") {
-                            return item.error;
-                        }
-                    }
-                    return null;
-                })
+                .map(extractErrorMessage)
                 .filter(Boolean);
 
             if (messages.length > 0) {
@@ -776,6 +797,22 @@
         return "The task could not be saved. Please try again.";
     }
 
+    function extractErrorMessage(item) {
+        if (item && typeof item === "object") {
+            if (typeof item.msg === "string") {
+                return item.msg;
+            }
+            if (typeof item.message === "string") {
+                return item.message;
+            }
+            if (typeof item.error === "string") {
+                return item.error;
+            }
+        }
+
+        return null;
+    }
+
     function getFieldErrors(payload) {
         if (!payload || typeof payload !== "object") {
             return {};
@@ -785,29 +822,31 @@
             return {};
         }
 
-        return payload.detail.reduce((fieldErrors, item) => {
-            if (!item || typeof item !== "object") {
-                return fieldErrors;
-            }
+        return payload.detail.reduce(collectFieldErrors, {});
+    }
 
-            const location = Array.isArray(item.loc) ? item.loc : [];
-            const fieldName = typeof location[location.length - 1] === "string"
-                ? location[location.length - 1]
-                : null;
-            const errorMessage = typeof item.msg === "string"
-                ? item.msg
-                : typeof item.message === "string"
-                    ? item.message
-                    : typeof item.error === "string"
-                        ? item.error
-                        : null;
-
-            if (fieldName && errorMessage) {
-                fieldErrors[fieldName] = errorMessage;
-            }
-
+    function collectFieldErrors(fieldErrors, item) {
+        if (!item || typeof item !== "object") {
             return fieldErrors;
-        }, {});
+        }
+
+        const location = Array.isArray(item.loc) ? item.loc : [];
+        const fieldName = typeof location[location.length - 1] === "string"
+            ? location[location.length - 1]
+            : null;
+        const errorMessage = typeof item.msg === "string"
+            ? item.msg
+            : typeof item.message === "string"
+                ? item.message
+                : typeof item.error === "string"
+                    ? item.error
+                    : null;
+
+        if (fieldName && errorMessage) {
+            fieldErrors[fieldName] = errorMessage;
+        }
+
+        return fieldErrors;
     }
 
     async function readErrorPayload(response) {
@@ -838,24 +877,28 @@
         return { message: fallbackMessage, fieldErrors: {} };
     }
 
+    function updateBoardDisplayState(nextBoardState, nextFeedbackNotice) {
+        boardDisplayState = nextBoardState;
+        feedbackNotice = nextFeedbackNotice;
+        renderBoard(taskCollection);
+    }
+
     async function updateTaskStatus(taskId, targetStatus) {
-        const currentTask = tasks.find((task) => String(task.id) === String(taskId));
+        const currentTask = findTaskById(taskId);
         if (!currentTask || currentTask.status === targetStatus) {
             return;
         }
 
-        const previousTasks = tasks.map((task) => ({ ...task }));
-        const optimisticTasks = tasks.map((task) => {
+        const previousTasks = taskCollection.map(cloneTask);
+        const optimisticTasks = taskCollection.map(function applyStatusUpdate(task) {
             if (String(task.id) === String(taskId)) {
                 return { ...task, status: targetStatus };
             }
             return task;
         });
 
-        tasks = optimisticTasks;
-        feedbackMessage = "";
-        boardState = tasks.length === 0 ? "empty" : "ready";
-        renderBoard(tasks);
+        taskCollection = optimisticTasks;
+        updateBoardDisplayState(taskCollection.length === 0 ? "empty" : "ready", "");
 
         try {
             const response = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`, {
@@ -867,25 +910,23 @@
             });
 
             if (!response.ok) {
-                tasks = previousTasks;
+                taskCollection = previousTasks;
                 const errorPayload = await readErrorPayload(response);
-                feedbackMessage = errorPayload.message;
-                boardState = tasks.length === 0 ? "empty" : "ready";
-                renderBoard(tasks);
+                updateBoardDisplayState(taskCollection.length === 0 ? "empty" : "ready", errorPayload.message);
                 return;
             }
 
-            feedbackMessage = "";
-            tasks = optimisticTasks;
-            boardState = tasks.length === 0 ? "empty" : "ready";
-            renderBoard(tasks);
+            taskCollection = optimisticTasks;
+            updateBoardDisplayState(taskCollection.length === 0 ? "empty" : "ready", "");
         } catch (error) {
             console.error("Unable to update task status", error);
-            tasks = previousTasks;
-            feedbackMessage = "The task could not be moved because the server was unavailable. Please try again.";
-            boardState = tasks.length === 0 ? "empty" : "ready";
-            renderBoard(tasks);
+            taskCollection = previousTasks;
+            updateBoardDisplayState(taskCollection.length === 0 ? "empty" : "ready", "The task could not be moved because the server was unavailable. Please try again.");
         }
+    }
+
+    function cloneTask(task) {
+        return { ...task };
     }
 
     async function submitTaskForm(event) {
@@ -899,15 +940,21 @@
             return;
         }
 
+        const isEdit = modalViewState.mode === "edit";
+        const currentTask = isEdit ? findTaskById(modalTaskId.value || "") : null;
         const formPayload = {
             title,
             description: modalDescriptionInput.value,
-            status: modalStatusSelect.value,
             priority: modalPrioritySelect.value,
             assignee: modalAssigneeInput.value.trim() ? modalAssigneeInput.value.trim() : null
         };
 
-        const isEdit = modalState.mode === "edit";
+        if (!isEdit) {
+            formPayload.status = modalStatusSelect.value;
+        } else if (currentTask && modalStatusSelect.value !== currentTask.status) {
+            formPayload.status = modalStatusSelect.value;
+        }
+
         const requestUrl = isEdit
             ? `${API_BASE}/tasks/${encodeURIComponent(modalTaskId.value || "")}`
             : `${API_BASE}/tasks`;
@@ -950,7 +997,7 @@
             }
 
             closeTaskModal();
-            feedbackMessage = "";
+            feedbackNotice = "";
             await fetchTasks();
         } catch (error) {
             console.error("Unable to save task", error);
@@ -959,8 +1006,8 @@
     }
 
     async function fetchTasks() {
-        boardState = "loading";
-        renderBoard(tasks);
+        boardDisplayState = "loading";
+        renderBoard(taskCollection);
 
         try {
             const response = await fetch(`${API_BASE}/tasks`);
@@ -970,44 +1017,52 @@
 
             const payload = await response.json();
             const loadedTasks = Array.isArray(payload) ? payload : payload.tasks || [];
-            tasks = loadedTasks;
-            boardState = loadedTasks.length === 0 ? "empty" : "ready";
-            renderBoard(tasks);
+            taskCollection = loadedTasks;
+            boardDisplayState = loadedTasks.length === 0 ? "empty" : "ready";
+            renderBoard(taskCollection);
         } catch (error) {
             console.error("Unable to load tasks", error);
-            tasks = [];
-            boardState = "error";
-            renderBoard(tasks);
+            taskCollection = [];
+            boardDisplayState = "error";
+            renderBoard(taskCollection);
         }
     }
 
-    newTaskButton.addEventListener("click", () => {
+    function handleNewTaskButtonClick() {
         openTaskModal("create");
-    });
+    }
 
-    modalCloseButton.addEventListener("click", () => {
+    function handleModalCloseButtonClick() {
         closeTaskModal();
-    });
+    }
 
-    modalCancelButton.addEventListener("click", () => {
-        closeTaskModal();
-    });
-
-    document.querySelectorAll("[data-close-modal]").forEach((element) => {
-        element.addEventListener("click", (event) => {
-            if (event.target === element) {
-                closeTaskModal();
-            }
-        });
-    });
-
-    modalForm.addEventListener("submit", submitTaskForm);
-
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && modalState.isOpen) {
+    function handleModalCloseTriggerClick(event) {
+        if (event.target === event.currentTarget) {
             closeTaskModal();
         }
-    });
+    }
+
+    function handleTaskFormSubmit(event) {
+        submitTaskForm(event);
+    }
+
+    function handleDocumentKeyDown(event) {
+        if (event.key === "Escape" && modalViewState.isOpen) {
+            closeTaskModal();
+        }
+    }
+
+    newTaskButton.onclick = handleNewTaskButtonClick;
+    modalCloseButton.onclick = handleModalCloseButtonClick;
+    modalCancelButton.onclick = handleModalCloseButtonClick;
+
+    document.querySelectorAll("[data-close-modal]").forEach(assignModalCloseTrigger);
+    function assignModalCloseTrigger(closeTriggerElement) {
+        closeTriggerElement.onclick = handleModalCloseTriggerClick;
+    }
+
+    modalForm.onsubmit = handleTaskFormSubmit;
+    document.onkeydown = handleDocumentKeyDown;
 
     fetchTasks();
   </script>
