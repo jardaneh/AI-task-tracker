@@ -1,3 +1,5 @@
+from tokenize import String
+
 from fastapi.testclient import TestClient
 from app.models import TaskStatus, TaskPriority
 
@@ -111,6 +113,40 @@ def test_patch_valid_transition_todo_to_inprogress_returns_200(client: TestClien
     r2 = client.patch(f"/tasks/{tid}", json={"status": TaskStatus.IN_PROGRESS.value})
     assert r2.status_code == 200
     assert r2.json()["status"] == TaskStatus.IN_PROGRESS.value
+
+
+def test_patch_valid_transition_inprogress_to_done_returns_200(client: TestClient):
+    create_response = client.post("/tasks", json={"title": "t"})
+    task_id = create_response.json()["id"]
+
+    first_patch = client.patch(f"/tasks/{task_id}", json={"status": TaskStatus.IN_PROGRESS.value})
+    assert first_patch.status_code == 200
+
+    second_patch = client.patch(f"/tasks/{task_id}", json={"status": TaskStatus.DONE.value})
+    assert second_patch.status_code == 200
+    assert second_patch.json()["status"] == TaskStatus.DONE.value
+
+
+def test_patch_unknown_field_returns_422(client: TestClient):
+    create_response = client.post("/tasks", json={"title": "t"})
+    task_id = create_response.json()["id"]
+
+    response = client.patch(f"/tasks/{task_id}", json={"owner": "alice"})
+    assert response.status_code == 422
+    assert "extra inputs are not permitted" in response.text.lower()
+
+def test_patch_empty_json_object_returns_existing_task_unchanged(client: TestClient):
+    create_response = client.post("/tasks", json={"title": "t"})
+    assert create_response.status_code == 201
+    created_task = create_response.json()
+
+    response = client.patch(f"/tasks/{created_task['id']}", json={})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == created_task["id"]
+    assert data["title"] == created_task["title"]
+    assert data["description"] == created_task["description"]
+    assert data["status"] == created_task["status"]
 
 
 def test_patch_invalid_transition_todo_to_done_returns_422(client: TestClient):
