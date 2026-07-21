@@ -2,51 +2,77 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project
+## Tech stack
 
-Task Tracker: a FastAPI backend (`backend/app`) with a single-page vanilla JS/HTML frontend (`frontend/index.html`), backed by pure in-memory storage (no DB, no file persistence despite what older docs may imply).
+- **Python**: venv reports 3.10.12 — [VERIFY] if the course expects 3.11; not stated in `requirements.txt` or `README.md`, so do not assume 3.11 without checking the environment you're actually running in.
+- **FastAPI** 0.115.0 (`requirements.txt`)
+- **Pydantic** v2 (2.9.2, `requirements.txt`) — models use `ConfigDict`/`field_validator`, the v2 API.
+- **Uvicorn** 0.30.6 with `[standard]` extra (`requirements.txt`)
+- **pytest** — installed in `venv` (9.1.1) but **not pinned in `requirements.txt`** [VERIFY] whether that's intentional or a missing dev-dependency entry.
+- **httpx** — installed in `venv` (0.28.1), also not in `requirements.txt`; used transitively by FastAPI's `TestClient` in `backend/tests/conftest.py`.
+- **python-dotenv** 1.0.1 (`requirements.txt`) — loads `.env` in `main.py`.
+- **Frontend**: vanilla JavaScript + HTML, single file `frontend/index.html`, no framework, no build step.
 
-## Commands
-
-Run all commands from `backend/` — the app is the `app` package rooted there (`app.main`, `app.storage`, etc.), and `backend/tests/conftest.py` imports it as such.
+## Run command
 
 ```bash
-# Setup (from repo root)
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # PORT, APP_ENV
-
-# Run the server (from backend/)
 cd backend
 uvicorn app.main:app --reload --port 8000
-# Swagger UI: http://localhost:8000/docs
-
-# Run tests (from backend/)
-cd backend
-pytest
-pytest tests/test_tasks.py::test_patch_valid_transition_todo_to_inprogress_returns_200  # single test
-
-# Frontend: no build step — open frontend/index.html directly in a browser,
-# or serve it (e.g. `python3 -m http.server 8080` from frontend/) since it
-# calls the API via CORS from a separate origin.
 ```
+
+Swagger UI: http://localhost:8000/docs
+
+## Test command
+
+```bash
+cd backend
+pytest -v
+```
+
+Single test: `pytest -v tests/test_tasks.py::test_patch_valid_transition_todo_to_inprogress_returns_200`
+
+Run all commands from `backend/` — the app is the `app` package rooted there (`app.main`, `app.storage`, etc.), and `backend/tests/conftest.py` imports it as such.
 
 There is also a standalone script `tests/verify_a.py` (repo root, not part of the pytest suite) that exercises `TaskCreate`/`TaskUpdate` validation directly and prints PASS/FAIL lines — run with `python -m tests.verify_a` from the repo root if asked to re-verify schema validation behavior outside of pytest.
 
 ## Architecture
 
-**Request flow:** `frontend/index.html` (fetch calls, `API_BASE = "http://localhost:8000"`) → `backend/app/main.py` (route handlers) → `backend/app/business_rules.py` (status-transition validation) → `backend/app/storage.py` (in-memory dict keyed by task id, `_tasks: dict[str, TaskResponse]`).
+**Backend** (`backend/app/`):
+- `main.py` — FastAPI app instance, CORS config, and all route handlers (`/health`, `POST/GET/PATCH/DELETE /tasks`, `GET /tasks/{id}`). Handlers are thin — they delegate to `storage` and add only the transition check and 404s.
+- `models.py` — `TaskStatus`/`TaskPriority` enums and the `TaskCreate`/`TaskUpdate`/`TaskResponse` Pydantic models (validation lives here: `extra="forbid"`, title stripping/blank/length checks).
+- `business_rules.py` — `validate_status_transition` and `VALID_TRANSITIONS`; this is where task status rules live (see Business rules below).
+- `storage.py` — in-memory dict keyed by task id (`_tasks: dict[str, TaskResponse]`); no DB, no file persistence. `_reset()` clears it for tests.
+- `utils.py` — `trim_title` helper.
+- `schemas.py` and `routes/tasks.py` — **stale/unused**. `schemas.py` imports `Priority`/`Status` from `app.models`, which no longer exist there (`app/models.py` defines `TaskPriority`/`TaskStatus`); nothing imports this module. `routes/tasks.py` defines an empty `APIRouter` that is never mounted on `app`. Treat `main.py` + `models.py` as the source of truth, not these two files.
 
-**Status model is a one-way-ish Kanban flow, not a free dropdown.** `TaskStatus` is `ToDo` / `InProgress` / `Done`. Allowed transitions live in `business_rules.VALID_TRANSITIONS`: `ToDo→InProgress`, `InProgress→Done`, `Done→InProgress`. Any other transition (including same→same, or `ToDo→Done` directly) raises HTTP 422 from `validate_status_transition`. This is enforced only in `PATCH /tasks/{id}` in `main.py`, and only when `payload.status is not None` — i.e. the frontend must not send the current status back unchanged as part of an edit, or it will trip this check (this exact bug was fixed once already, per git history).
+**Frontend** (`frontend/index.html`, single file): rendering (`renderBoard`, `createColumn`, `createTaskCard`), drag-and-drop handlers (`handleTaskCardDragStart/End`, `handleBoardColumnDragOver/Leave/Drop`) that PATCH status on drop, and a create/edit modal (`openTaskModal`/`closeTaskModal`) that POSTs/PATCHes task fields and surfaces 422 errors inline via `getErrorMessage`/`getFieldErrors`.
 
-**Validation lives on the Pydantic models, not in route handlers.** `app/models.py` defines `TaskCreate`/`TaskUpdate`/`TaskResponse` with `extra="forbid"` (unknown fields → 422) and a `title` validator (strips whitespace, rejects blank, caps at 200 chars). `main.py` handlers are thin — they delegate straight to `storage` and only add the transition check and 404s.
+**Tests** (`backend/tests/`): `conftest.py` provides a `client` fixture (`TestClient(app)`) and an autouse fixture that calls `storage._reset()` before/after every test. `test_tasks.py` holds the endpoint tests, one behavior per test, named `test_<verb>_<condition>_returns_<code>`.
 
-**Known dead/stale code — do not treat as the source of truth:**
-- `backend/app/schemas.py` defines its own `TaskCreate`/`TaskUpdate`/`TaskRead` importing `Priority`/`Status` from `app.models`, but `app/models.py` actually defines `TaskPriority`/`TaskStatus`. This module is unused (nothing imports it) and would fail if imported. The real schemas are in `app/models.py`.
-- `backend/app/routes/tasks.py` defines an empty, unmounted `APIRouter` — all task endpoints are actually declared directly on `app` in `main.py`, not via this router.
-- `README.md` describes an earlier project stage (JSON file persistence, no CRUD yet) that has been superseded by the current in-memory-only, fully-CRUD implementation — don't rely on the README for current behavior.
+`README.md` describes an earlier project stage (JSON file persistence, no CRUD yet) that the current code has superseded — don't rely on it for current behavior.
 
-**Frontend structure (`frontend/index.html`, single file):** rendering (`renderBoard`, `createColumn`, `createTaskCard`), drag-and-drop handlers (`handleTaskCardDragStart/End`, `handleBoardColumnDragOver/Leave/Drop`) that PATCH status on drop, and a create/edit modal (`openTaskModal`/`closeTaskModal`) that PATCHes/POSTs task fields and surfaces 422 errors inline via `getErrorMessage`/`getFieldErrors`. When editing a task through the modal, only send fields that actually changed — sending back the unchanged `status` on an edit is what previously caused spurious 422s from the transition check above.
+## Business rules
 
-**Testing conventions:** `backend/tests/conftest.py` provides a `client` fixture (`TestClient(app)`) and an autouse fixture that calls `storage._reset()` before/after every test, so tests never need to manage state manually. New endpoint tests should follow the existing pattern in `test_tasks.py` (one behavior per test, named `test_<verb>_<condition>_returns_<code>`).
+As implemented in `backend/app/models.py` and `backend/app/business_rules.py`:
+
+- **Task status values** (`TaskStatus`): `ToDo`, `InProgress`, `Done`.
+- **Task priority values** (`TaskPriority`): `Low`, `Medium`, `High`.
+- **Allowed status transitions** (`business_rules.VALID_TRANSITIONS`): `ToDo → InProgress`, `InProgress → Done`, `Done → InProgress`. Any other transition — including same-status and `ToDo → Done` directly — raises `HTTP 422` from `validate_status_transition`.
+- This check runs only in `PATCH /tasks/{id}`, and only when `payload.status is not None` — sending back the current status unchanged as part of an edit will trip it (this exact bug was fixed once already, per git history).
+- Title validation (`TaskCreate`/`TaskUpdate`): required, whitespace-stripped, cannot be blank after stripping, max 200 characters.
+- All four models use `extra="forbid"` — unknown fields on request bodies return 422.
+
+## UI states and CORS
+
+- CORS (`main.py`): `allow_origins` is restricted to `http://localhost:8080` and `http://127.0.0.1:8080` — the frontend must be served from one of these origins (e.g. `python3 -m http.server 8080` from `frontend/`) or requests will be blocked by the browser.
+- Frontend defines explicit UI states in `index.html`: `createLoadingState()`, `createErrorState()`, and `createEmptyPlaceholder()` (empty column), alongside the normal populated-column render path in `renderBoard`/`createColumn`.
+- Form/edit errors from the API (422s) are surfaced inline in the modal via `getErrorMessage`/`getFieldErrors`/`showFormBanner`, not as raw alerts.
+
+## Do-not rules
+
+- Do not add authentication/authorization.
+- Do not add a database or persistence layer.
+- Do not add deployment steps or infrastructure config.
+- Do not make major UI changes.
+
+...without asking first.
