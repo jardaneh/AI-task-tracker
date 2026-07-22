@@ -50,7 +50,7 @@ def test_create_task_unknown_field_returns_422(client: TestClient):
 
 def test_list_tasks_empty_returns_200_and_empty_list(client: TestClient):
     r = client.get("/tasks")
-    assert r.status_code == 200
+    assert r.status_code == 200 #Modified back to 200
     assert r.json() == []
 
 
