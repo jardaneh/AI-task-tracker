@@ -53,9 +53,14 @@ def create_task(payload: TaskCreate) -> TaskResponse:
     return storage.add_task(payload)
 
 @app.get("/tasks", response_model=list[TaskResponse], tags=["tasks"])
-def list_tasks(status: TaskStatus | None = None, priority: TaskPriority | None = None) -> list[TaskResponse]:
-    """Return a list of tasks, optionally filtered by status and/or priority."""
-    return storage.get_all_tasks(status=status, priority=priority)
+def list_tasks(
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+    text: str | None = None,
+    assignee: str | None = None,
+) -> list[TaskResponse]:
+    """Return a list of tasks, optionally filtered by status, priority, text, and assignee."""
+    return storage.get_all_tasks(status=status, priority=priority, text=text, assignee=assignee)
 
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])

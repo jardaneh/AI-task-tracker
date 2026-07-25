@@ -5,6 +5,7 @@ from typing import Optional, List
 
 from .models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
 import uuid
+import re
 
 _tasks: dict[str, TaskResponse] = {}
 
@@ -26,12 +27,47 @@ def add_task(payload: TaskCreate) -> TaskResponse:
     return task
 
 
-def get_all_tasks(status: Optional[TaskStatus] = None, priority: Optional[TaskPriority] = None) -> List[TaskResponse]:
+def get_all_tasks(
+    status: Optional[TaskStatus] = None,
+    priority: Optional[TaskPriority] = None,
+    text: Optional[str] = None,
+    assignee: Optional[str] = None,
+) -> List[TaskResponse]:
     results = list(_tasks.values())
     if status is not None:
         results = [t for t in results if t.status == status]
     if priority is not None:
         results = [t for t in results if t.priority == priority]
+
+    # Normalize and apply text filter (title or description) if provided
+    if text is not None:
+        text_norm = text.strip().lower()
+        # remove any character that is not a-z or 0-9
+        text_norm = re.sub(r"[^a-z0-9]+", "", text_norm)
+        if text_norm:
+            filtered: List[TaskResponse] = []
+            for task in results:
+                title = (task.title or "").strip().lower()
+                title_norm = re.sub(r"[^a-z0-9]+", "", title)
+                description = (task.description or "").strip().lower()
+                description_norm = re.sub(r"[^a-z0-9]+", "", description)
+                if text_norm in title_norm or text_norm in description_norm:
+                    filtered.append(task)
+            results = filtered
+
+    # Normalize and apply assignee filter if provided
+    if assignee is not None:
+        assignee_norm = assignee.strip().lower()
+        assignee_norm = re.sub(r"[^a-z0-9]+", "", assignee_norm)
+        if assignee_norm:
+            filtered: List[TaskResponse] = []
+            for task in results:
+                a = (task.assignee or "").strip().lower()
+                a_norm = re.sub(r"[^a-z0-9]+", "", a)
+                if assignee_norm in a_norm:
+                    filtered.append(task)
+            results = filtered
+
     return results
 
 
