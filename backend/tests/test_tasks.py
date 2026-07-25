@@ -175,3 +175,137 @@ def test_delete_existing_returns_204_no_body(client: TestClient):
 def test_delete_missing_returns_404(client: TestClient):
     r = client.delete("/tasks/missing")
     assert r.status_code == 404
+
+
+def test_list_tasks_filter_by_text_returns_200_and_only_matches(client: TestClient):
+    # create tasks where only one contains the text 'crash' in description
+    client.post("/tasks", json={"title": "Fix bug", "description": "crash on load"})
+    client.post("/tasks", json={"title": "Unrelated", "description": "nothing to see"})
+    r = client.get("/tasks", params={"text": "crash"})
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert "crash" in data[0]["description"].lower()
+
+
+def test_list_tasks_filter_by_assignee_returns_200_and_only_matches(client: TestClient):
+    client.post("/tasks", json={"title": "t1", "assignee": "Alice"})
+    client.post("/tasks", json={"title": "t2", "assignee": "Bob"})
+    r = client.get("/tasks", params={"assignee": "alice"})
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["assignee"] is not None
+    assert data[0]["assignee"].lower() == "alice"
+
+
+def test_list_tasks_filter_by_unknown_priority_returns_422(client: TestClient):
+    # passing an invalid enum value for priority should result in a 422 from FastAPI
+    r = client.get("/tasks", params={"priority": "NotARealPriority"})
+    assert r.status_code == 422
+
+
+def test_list_tasks_filter_by_assignee_and_text_and_priority_returns_200_and_only_matches(client: TestClient):
+    # matching task
+    client.post(
+        "/tasks",
+        json={
+            "title": "Fix login",
+            "description": "critical bug",
+            "assignee": "alice",
+            "priority": TaskPriority.HIGH.value,
+        },
+    )
+    # non-matching by priority
+    client.post(
+        "/tasks",
+        json={
+            "title": "Fix login",
+            "description": "critical bug",
+            "assignee": "alice",
+            "priority": TaskPriority.LOW.value,
+        },
+    )
+    # non-matching by assignee
+    client.post(
+        "/tasks",
+        json={
+            "title": "Fix login",
+            "description": "critical bug",
+            "assignee": "bob",
+            "priority": TaskPriority.HIGH.value,
+        },
+    )
+    r = client.get(
+        "/tasks",
+        params={"assignee": "alice", "text": "login", "priority": TaskPriority.HIGH.value},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    item = data[0]
+    assert item["assignee"].lower() == "alice"
+    assert item["priority"] == TaskPriority.HIGH.value
+    assert "login" in item["title"].lower() or "login" in item["description"].lower()
+
+
+def test_list_tasks_filter_by_assignee_and_status_and_priority_returns_200_and_only_matches(client: TestClient):
+    # matching task with explicit status and priority
+    client.post(
+        "/tasks",
+        json={
+            "title": "Implement feature",
+            "description": "work in progress",
+            "assignee": "carol",
+            "status": TaskStatus.IN_PROGRESS.value,
+            "priority": TaskPriority.MEDIUM.value,
+        },
+    )
+    # non-matching: different status
+    client.post(
+        "/tasks",
+        json={
+            "title": "Implement feature",
+            "description": "done",
+            "assignee": "carol",
+            "status": TaskStatus.DONE.value,
+            "priority": TaskPriority.MEDIUM.value,
+        },
+    )
+    # non-matching: different assignee
+    client.post(
+        "/tasks",
+        json={
+            "title": "Implement feature",
+            "description": "work in progress",
+            "assignee": "dave",
+            "status": TaskStatus.IN_PROGRESS.value,
+            "priority": TaskPriority.MEDIUM.value,
+        },
+    )
+
+    r = client.get(
+        "/tasks",
+        params={
+            "assignee": "carol",
+            "status": TaskStatus.IN_PROGRESS.value,
+            "priority": TaskPriority.MEDIUM.value,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    item = data[0]
+    assert item["assignee"].lower() == "carol"
+    assert item["status"] == TaskStatus.IN_PROGRESS.value
+    assert item["priority"] == TaskPriority.MEDIUM.value
+
+
+def test_list_tasks_filter_by_comments_returns_422(client: TestClient):
+    # 'comments' is not a supported query parameter; sending it should yield a 422 from FastAPI
+    r = client.get("/tasks", params={"comments": "something"})
+    assert r.status_code == 422
