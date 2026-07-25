@@ -2,9 +2,7 @@ import os
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi import status
-from fastapi import HTTPException
+from fastapi import FastAPI, status, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
@@ -54,12 +52,27 @@ def create_task(payload: TaskCreate) -> TaskResponse:
 
 @app.get("/tasks", response_model=list[TaskResponse], tags=["tasks"])
 def list_tasks(
+    request: Request,
     status: TaskStatus | None = None,
     priority: TaskPriority | None = None,
     text: str | None = None,
     assignee: str | None = None,
 ) -> list[TaskResponse]:
-    """Return a list of tasks, optionally filtered by status, priority, text, and assignee."""
+    """Return a list of tasks, optionally filtered by status, priority, text, and assignee.
+
+    Reject unknown query parameters with a 422 and an error message naming the offending parameter.
+    """
+    # allowed query param names (FastAPI will have already validated enum/typing for known params)
+    allowed = {"status", "priority", "text", "assignee"}
+    # fastapi's Request.query_params is a MultiDict-like object; convert to set of keys
+    received = set(request.query_params.keys())
+    # remove params that are allowed and may be absent
+    unknown = received - allowed
+    if unknown:
+        # return 422 with an error message pointing out the first unknown param
+        param = sorted(list(unknown))[0]
+        raise HTTPException(status_code=422, detail=f"Unknown query parameter: {param}")
+
     return storage.get_all_tasks(status=status, priority=priority, text=text, assignee=assignee)
 
 
