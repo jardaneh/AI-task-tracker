@@ -78,3 +78,19 @@ class TaskResponse(BaseModel):
     assignee: Optional[str]
     created_at: datetime
     updated_at: datetime
+
+
+class ActivityType(str, Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    STATUS_UPDATE = "status-update"
+    DELETE = "delete"
+
+
+class Activity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_uuid: str
+    timestamp: datetime
+    type: ActivityType
+    details: str
