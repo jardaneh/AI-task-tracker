@@ -3,11 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from .models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
+from .models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority, Activity, ActivityType
 import uuid
 import re
 
 _tasks: dict[str, TaskResponse] = {}
+# global mapping timestamp -> Activity
+_activities_by_timestamp: dict[datetime, Activity] = {}
+# mapping task_uuid -> (mapping timestamp -> Activity)
+_activities_by_task: dict[str, dict[datetime, Activity]] = {}
 
 
 def add_task(payload: TaskCreate) -> TaskResponse:
@@ -24,6 +28,27 @@ def add_task(payload: TaskCreate) -> TaskResponse:
         updated_at=now,
     )
     _tasks[task_id] = task
+
+    # create activity entry for creation
+    details_obj = {
+        "title": task.title,
+        "description": task.description,
+        "status": task.status.value,
+        "priority": task.priority.value,
+        "assignee": task.assignee,
+    }
+    activity = Activity(
+        task_uuid=task_id,
+        timestamp=task.created_at,
+        type=ActivityType.CREATE,
+        details=__import__('json').dumps(details_obj),
+    )
+    _activities_by_timestamp[activity.timestamp] = activity
+    # store reference in per-task mapping
+    if task_id not in _activities_by_task:
+        _activities_by_task[task_id] = {}
+    _activities_by_task[task_id][activity.timestamp] = activity
+
     return task
 
 
@@ -75,6 +100,7 @@ def get_task_by_id(task_id: str) -> Optional[TaskResponse]:
     return _tasks.get(task_id)
 
 
+
 def update_task(task_id: str, payload: TaskUpdate) -> Optional[TaskResponse]:
     existing = _tasks.get(task_id)
     if existing is None:
@@ -82,24 +108,92 @@ def update_task(task_id: str, payload: TaskUpdate) -> Optional[TaskResponse]:
     data = payload.model_dump(exclude_unset=True)
     changed = False
     updated_fields: dict = {}
+    status_changed = False
+    old_status = existing.status
     for key, value in data.items():
         # only update allowed fields
         if key in {"title", "description", "status", "priority", "assignee"}:
+            # detect status change
+            if key == "status":
+                if value != existing.status:
+                    status_changed = True
+                else:
+                    # no-op for status
+                    continue
             setattr(existing, key, value)
             changed = True
             updated_fields[key] = value
     if changed:
         existing.updated_at = datetime.now(timezone.utc)
         _tasks[task_id] = existing
+
+        # create activities depending on what changed
+        # status_change activity
+        if status_changed:
+            details_obj = {"previous_status": old_status.value, "new_status": existing.status.value}
+            activity_status = Activity(
+                task_uuid=task_id,
+                timestamp=existing.updated_at,
+                type=ActivityType.STATUS_UPDATE,
+                details=__import__('json').dumps(details_obj),
+            )
+            _activities_by_timestamp[activity_status.timestamp] = activity_status
+            if task_id not in _activities_by_task:
+                _activities_by_task[task_id] = {}
+            _activities_by_task[task_id][activity_status.timestamp] = activity_status
+
+        # update activity for other fields (exclude status)
+        other_changed = {k: v for k, v in updated_fields.items() if k != "status"}
+        if other_changed:
+            # details only include new values
+            details_obj = {}
+            for k, v in other_changed.items():
+                # if it's an Enum, use its value
+                if hasattr(v, "value"):
+                    details_obj[k] = v.value
+                else:
+                    details_obj[k] = v
+            activity_update = Activity(
+                task_uuid=task_id,
+                timestamp=existing.updated_at,
+                type=ActivityType.UPDATE,
+                details=__import__('json').dumps(details_obj),
+            )
+            _activities_by_timestamp[activity_update.timestamp] = activity_update
+            if task_id not in _activities_by_task:
+                _activities_by_task[task_id] = {}
+            _activities_by_task[task_id][activity_update.timestamp] = activity_update
+
     return existing
 
 
 def delete_task(task_id: str) -> bool:
     if task_id in _tasks:
+        # capture snapshot before deletion
+        task = _tasks.get(task_id)
+        if task is None:
+            return False
+        details_obj = {
+            "title": task.title,
+            "description": task.description,
+            "status": task.status.value,
+            "priority": task.priority.value,
+            "assignee": task.assignee,
+        }
+        activity = Activity(
+            task_uuid=task_id,
+            timestamp=datetime.now(timezone.utc),
+            type=ActivityType.DELETE,
+            details=__import__('json').dumps(details_obj),
+        )
+        _activities_by_timestamp[activity.timestamp] = activity
+        if task_id not in _activities_by_task:
+            _activities_by_task[task_id] = {}
+        _activities_by_task[task_id][activity.timestamp] = activity
+
         _tasks.pop(task_id)
         return True
     return False
-
 
 def _reset() -> None:
     _tasks.clear()
