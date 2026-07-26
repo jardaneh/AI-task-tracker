@@ -195,5 +195,39 @@ def delete_task(task_id: str) -> bool:
         return True
     return False
 
+def get_activity_entries(
+    task: Optional[str] = None,
+    from_ts: Optional[datetime] = None,
+    to_ts: Optional[datetime] = None,
+    type: Optional[ActivityType] = None,
+) -> List[Activity]:
+    """Return a list of Activity entries matching optional filters.
+
+    If 'task' is provided, the per-task mapping is queried first. The returned
+    list is ordered from most recent to least recent by timestamp.
+    """
+    # choose the appropriate source mapping
+    if task is not None:
+        entries = _activities_by_task.get(task, {})
+    else:
+        entries = _activities_by_timestamp
+
+    results: List[Activity] = []
+    for ts, act in entries.items():
+        if from_ts is not None and ts < from_ts:
+            continue
+        if to_ts is not None and ts > to_ts:
+            continue
+        if type is not None and act.type != type:
+            continue
+        results.append(act)
+
+    # sort by timestamp descending (most recent first)
+    results.sort(key=lambda a: a.timestamp, reverse=True)
+    return results
+
+
 def _reset() -> None:
     _tasks.clear()
+    _activities_by_timestamp.clear()
+    _activities_by_task.clear()

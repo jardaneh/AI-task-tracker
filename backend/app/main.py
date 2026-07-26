@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, status, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority
+from app.models import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskPriority, Activity, ActivityType
 from app import storage
 from app.business_rules import validate_status_transition
 
@@ -112,3 +112,49 @@ def delete_task(task_id: str) -> None:
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
     return None
+
+
+@app.get("/activity", tags=["activity"], response_model=list[Activity])
+def list_activity(
+    request: Request,
+    task: str | None = None,
+    from_: str | None = None,
+    to: str | None = None,
+    type: ActivityType | None = None,
+) -> list[Activity]:
+    """List activity entries filtered by optional query params.
+
+    Only the query params (task, from, to, type) are allowed. Dates must be
+    ISO8601 strings. Unknown query params return 422. Invalid date formats
+    return 422 with a specific message. If task is provided but does not
+    exist, return 404.
+    """
+    allowed = {"task", "from", "to", "type"}
+    received = set(request.query_params.keys())
+    unknown = received - allowed
+    if unknown:
+        param = sorted(list(unknown))[0]
+        raise HTTPException(status_code=422, detail=f"Unknown query parameter: {param}")
+
+    # validate task exists if provided
+    if task is not None:
+        if storage.get_task_by_id(task) is None:
+            raise HTTPException(status_code=404, detail=f"Task with id {task} not found")
+
+    # parse dates if provided
+    from_ts: datetime | None = None
+    to_ts: datetime | None = None
+    if from_ is not None:
+        try:
+            from_ts = datetime.fromisoformat(from_)
+        except Exception:
+            raise HTTPException(status_code=422, detail="the date/time values specified are in an incorrect format")
+    if to is not None:
+        try:
+            to_ts = datetime.fromisoformat(to)
+        except Exception:
+            raise HTTPException(status_code=422, detail="the date/time values specified are in an incorrect format")
+
+    # delegate to storage
+    activities = storage.get_activity_entries(task=task, from_ts=from_ts, to_ts=to_ts, type=type)
+    return activities
