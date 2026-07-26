@@ -53,6 +53,70 @@
             min-width: 110px;
         }
 
+        .app-header-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .task-card-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.75rem;
+        }
+
+        .activity-filter-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+            margin-bottom: 1rem;
+        }
+
+        .activity-filter-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .activity-table-wrapper {
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #ffffff;
+            min-width: 700px;
+        }
+
+        .activity-table th,
+        .activity-table td {
+            padding: 0.75rem 0.85rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+            font-size: 0.92rem;
+        }
+
+        .activity-table th {
+            background: #f8fafc;
+            color: var(--muted);
+            font-weight: 700;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .activity-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .activity-empty-state {
+            color: var(--muted);
+            font-style: italic;
+        }
+
         main {
             padding: 0 1.5rem 2rem;
         }
@@ -85,6 +149,14 @@
             border-radius: 18px;
             padding: 1.25rem;
             box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15);
+        }
+
+        .activity-modal-panel {
+            width: min(100%, 960px);
+            max-height: min(90vh, 760px);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .modal-header {
@@ -391,7 +463,10 @@
             <h1>Task Board</h1>
             <p>Drag tasks between columns to update their status.</p>
         </div>
-        <button id="new-task-button" class="edit-button new-task-button" type="button">New Task</button>
+        <div class="app-header-actions">
+            <button id="activity-log-button" class="secondary-button new-task-button" type="button">Activity Log</button>
+            <button id="new-task-button" class="edit-button new-task-button" type="button">New Task</button>
+        </div>
     </div>
   </header>
 
@@ -480,6 +555,58 @@
     </div>
   </div>
 
+  <div id="activity-modal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="activity-modal-title">
+    <div class="modal-overlay" data-close-modal="true"></div>
+    <div class="modal-panel activity-modal-panel">
+      <div class="modal-header">
+        <h2 id="activity-modal-title">Activity Log</h2>
+        <button id="activity-modal-close-button" class="modal-close-button" type="button" aria-label="Close dialog">×</button>
+      </div>
+      <form id="activity-filter-form" class="activity-filter-form">
+        <div class="form-grid activity-filter-grid">
+          <div class="form-field">
+            <label for="activity-task-id-input">Task Id</label>
+            <input id="activity-task-id-input" name="task" type="text" maxlength="120" />
+          </div>
+          <div class="form-field">
+            <label for="activity-start-input">Start</label>
+            <input id="activity-start-input" name="start" type="text" placeholder="2024-01-01T00:00:00" />
+          </div>
+          <div class="form-field">
+            <label for="activity-end-input">End</label>
+            <input id="activity-end-input" name="end" type="text" placeholder="2024-01-01T23:59:59" />
+          </div>
+          <div class="form-field">
+            <label for="activity-type-select">Type</label>
+            <select id="activity-type-select" name="type">
+              <option value="">All</option>
+              <option value="create">Create</option>
+              <option value="update">Update</option>
+              <option value="status-update">Status Update</option>
+              <option value="delete">Delete</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="activity-clear-filter-button" class="secondary-button" type="button">Clear Filter</button>
+          <button id="activity-apply-filter-button" class="edit-button" type="button">Apply Filter</button>
+        </div>
+      </form>
+      <div class="activity-table-wrapper">
+        <table class="activity-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Type</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="activity-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = "http://localhost:8000";
     const STATUSES = ["ToDo", "InProgress", "Done"];
@@ -511,6 +638,9 @@
         mode: "create",
         taskId: null
     };
+    let activityModalState = {
+        isOpen: false
+    };
 
     const modal = document.getElementById("task-modal");
     const modalTitle = document.getElementById("task-modal-title");
@@ -525,12 +655,23 @@
     const modalAssigneeInput = document.getElementById("task-assignee-input");
     const formBanner = document.getElementById("form-banner");
     const newTaskButton = document.getElementById("new-task-button");
+    const activityLogButton = document.getElementById("activity-log-button");
     const filterStatusSelect = document.getElementById("filter-status-select");
     const filterPrioritySelect = document.getElementById("filter-priority-select");
     const filterAssigneeInput = document.getElementById("filter-assignee-input");
     const filterTitleInput = document.getElementById("filter-title-input");
     const clearFilterButton = document.getElementById("clear-filter-button");
     const applyFilterButton = document.getElementById("apply-filter-button");
+    const activityModal = document.getElementById("activity-modal");
+    const activityModalCloseButton = document.getElementById("activity-modal-close-button");
+    const activityFilterForm = document.getElementById("activity-filter-form");
+    const activityTaskIdInput = document.getElementById("activity-task-id-input");
+    const activityStartInput = document.getElementById("activity-start-input");
+    const activityEndInput = document.getElementById("activity-end-input");
+    const activityTypeSelect = document.getElementById("activity-type-select");
+    const activityClearFilterButton = document.getElementById("activity-clear-filter-button");
+    const activityApplyFilterButton = document.getElementById("activity-apply-filter-button");
+    const activityTableBody = document.getElementById("activity-table-body");
 
     function createElement(tagName, className) {
         const element = document.createElement(tagName);
@@ -634,6 +775,11 @@
         openTaskModal("edit", task);
     }
 
+    function handleTaskCardActivityClick(event, task) {
+        event.stopPropagation();
+        openActivityModal(task.id);
+    }
+
     function createTaskCard(task) {
         const card = createElement("article", "task-card");
         card.dataset.taskId = String(task.id);
@@ -664,13 +810,25 @@
 
         card.appendChild(meta);
 
+        const actions = createElement("div", "task-card-actions");
+
         const editButton = createElement("button", "edit-button");
         editButton.type = "button";
         editButton.textContent = "Edit";
         editButton.onclick = function handleTaskEditButtonClick(event) {
             handleTaskCardEditClick(event, task);
         };
-        card.appendChild(editButton);
+        actions.appendChild(editButton);
+
+        const activityButton = createElement("button", "secondary-button");
+        activityButton.type = "button";
+        activityButton.textContent = "Activity Log";
+        activityButton.onclick = function handleTaskActivityButtonClick(event) {
+            handleTaskCardActivityClick(event, task);
+        };
+        actions.appendChild(activityButton);
+
+        card.appendChild(actions);
 
         return card;
     }
@@ -1172,13 +1330,156 @@
         openTaskModal("create");
     }
 
+    function closeActivityModal() {
+        activityModal.classList.remove("is-open");
+        activityModal.setAttribute("aria-hidden", "true");
+        activityModalState.isOpen = false;
+    }
+
+    function openActivityModal(taskId) {
+        activityModalState.isOpen = true;
+        if (typeof taskId === "string" && taskId) {
+            activityTaskIdInput.value = taskId;
+        } else {
+            activityTaskIdInput.value = "";
+        }
+        activityStartInput.value = "";
+        activityEndInput.value = "";
+        activityTypeSelect.value = "";
+        activityModal.classList.add("is-open");
+        activityModal.setAttribute("aria-hidden", "false");
+        window.requestAnimationFrame(function focusActivityTaskInput() {
+            activityTaskIdInput.focus();
+        });
+        fetchActivityLog();
+    }
+
+    function createActivityRow(entry) {
+        const row = createElement("tr");
+        const timestampCell = createElement("td");
+        const typeCell = createElement("td");
+        const detailsCell = createElement("td");
+
+        timestampCell.textContent = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "";
+        typeCell.textContent = entry.type || "";
+        if (typeof entry.details === "string") {
+            detailsCell.textContent = entry.details;
+        } else {
+            detailsCell.textContent = entry.details ? JSON.stringify(entry.details) : "";
+        }
+
+        row.appendChild(timestampCell);
+        row.appendChild(typeCell);
+        row.appendChild(detailsCell);
+        return row;
+    }
+
+    function createActivityEmptyState() {
+        const row = createElement("tr");
+        const cell = createElement("td");
+        cell.colSpan = 3;
+        cell.className = "activity-empty-state";
+        cell.textContent = "No activity entries found.";
+        row.appendChild(cell);
+        return row;
+    }
+
+    async function fetchActivityLog() {
+        const query = new URLSearchParams();
+        const taskIdValue = activityTaskIdInput.value.trim();
+        const startValue = activityStartInput.value.trim();
+        const endValue = activityEndInput.value.trim();
+        const typeValue = activityTypeSelect.value;
+
+        if (taskIdValue) {
+            query.set("task", taskIdValue);
+        }
+        if (startValue) {
+            query.set("start", startValue);
+        }
+        if (endValue) {
+            query.set("end", endValue);
+        }
+        if (typeValue) {
+            query.set("type", typeValue);
+        }
+
+        activityTableBody.replaceChildren();
+        const loadingRow = createElement("tr");
+        const loadingCell = createElement("td");
+        loadingCell.colSpan = 3;
+        loadingCell.className = "activity-empty-state";
+        loadingCell.textContent = "Loading activity entries…";
+        loadingRow.appendChild(loadingCell);
+        activityTableBody.appendChild(loadingRow);
+
+        try {
+            const response = await fetch(`${API_BASE}/activity${query.toString() ? `?${query.toString()}` : ""}`);
+            if (!response.ok) {
+                throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            const payload = await response.json();
+            const entries = Array.isArray(payload) ? payload : [];
+            activityTableBody.replaceChildren();
+            if (entries.length === 0) {
+                activityTableBody.appendChild(createActivityEmptyState());
+                return;
+            }
+
+            entries.forEach(function appendActivityRow(entry) {
+                activityTableBody.appendChild(createActivityRow(entry));
+            });
+        } catch (error) {
+            console.error("Unable to load activity entries", error);
+            activityTableBody.replaceChildren();
+            const errorRow = createElement("tr");
+            const errorCell = createElement("td");
+            errorCell.colSpan = 3;
+            errorCell.className = "activity-empty-state";
+            errorCell.textContent = "Unable to load activity entries. Please try again.";
+            errorRow.appendChild(errorCell);
+            activityTableBody.appendChild(errorRow);
+        }
+    }
+
+    function handleActivityLogButtonClick() {
+        openActivityModal();
+    }
+
+    function handleActivityModalCloseButtonClick() {
+        closeActivityModal();
+    }
+
+    function handleActivityModalCloseTriggerClick(event) {
+        if (event.target === event.currentTarget) {
+            closeActivityModal();
+        }
+    }
+
+    function handleActivityClearFilterClick() {
+        activityTaskIdInput.value = "";
+        activityStartInput.value = "";
+        activityEndInput.value = "";
+        activityTypeSelect.value = "";
+        fetchActivityLog();
+    }
+
+    function handleActivityApplyFilterClick() {
+        fetchActivityLog();
+    }
+
     function handleModalCloseButtonClick() {
         closeTaskModal();
     }
 
     function handleModalCloseTriggerClick(event) {
         if (event.target === event.currentTarget) {
-            closeTaskModal();
+            if (activityModalState.isOpen) {
+                closeActivityModal();
+            } else if (modalViewState.isOpen) {
+                closeTaskModal();
+            }
         }
     }
 
@@ -1187,8 +1488,12 @@
     }
 
     function handleDocumentKeyDown(event) {
-        if (event.key === "Escape" && modalViewState.isOpen) {
-            closeTaskModal();
+        if (event.key === "Escape") {
+            if (modalViewState.isOpen) {
+                closeTaskModal();
+            } else if (activityModalState.isOpen) {
+                closeActivityModal();
+            }
         }
     }
 
@@ -1196,10 +1501,14 @@
     populateSelectOptions(filterPrioritySelect, PRIORITY_OPTIONS);
 
     newTaskButton.onclick = handleNewTaskButtonClick;
+    activityLogButton.onclick = handleActivityLogButtonClick;
     modalCloseButton.onclick = handleModalCloseButtonClick;
     modalCancelButton.onclick = handleModalCloseButtonClick;
     clearFilterButton.onclick = handleClearFilterClick;
     applyFilterButton.onclick = handleApplyFilterClick;
+    activityModalCloseButton.onclick = handleActivityModalCloseButtonClick;
+    activityClearFilterButton.onclick = handleActivityClearFilterClick;
+    activityApplyFilterButton.onclick = handleActivityApplyFilterClick;
 
     document.querySelectorAll("[data-close-modal]").forEach(assignModalCloseTrigger);
     function assignModalCloseTrigger(closeTriggerElement) {
