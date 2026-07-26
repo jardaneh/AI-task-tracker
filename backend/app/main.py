@@ -118,18 +118,18 @@ def delete_task(task_id: str) -> None:
 def list_activity(
     request: Request,
     task: str | None = None,
-    from_: str | None = None,
-    to: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
     type: ActivityType | None = None,
 ) -> list[Activity]:
     """List activity entries filtered by optional query params.
 
-    Only the query params (task, from, to, type) are allowed. Dates must be
+    Only the query params (task, start, end, type) are allowed. Dates must be
     ISO8601 strings. Unknown query params return 422. Invalid date formats
     return 422 with a specific message. If task is provided but does not
     exist, return 404.
     """
-    allowed = {"task", "from", "to", "type"}
+    allowed = {"task", "start", "end", "type"}
     received = set(request.query_params.keys())
     unknown = received - allowed
     if unknown:
@@ -144,14 +144,22 @@ def list_activity(
     # parse dates if provided
     from_ts: datetime | None = None
     to_ts: datetime | None = None
-    if from_ is not None:
+    if start is not None:
         try:
-            from_ts = datetime.fromisoformat(from_)
+            s = start
+            # accept UTC 'Z' suffix by converting it to an offset recognized by fromisoformat
+            if s.endswith("Z"):
+                s = s.replace("Z", "+00:00")
+            from_ts = datetime.fromisoformat(s)
         except Exception:
             raise HTTPException(status_code=422, detail="the date/time values specified are in an incorrect format")
-    if to is not None:
+    if end is not None:
         try:
-            to_ts = datetime.fromisoformat(to)
+            e = end
+            # accept UTC 'Z' suffix by converting it to an offset recognized by fromisoformat
+            if e.endswith("Z"):
+                e = e.replace("Z", "+00:00")
+            to_ts = datetime.fromisoformat(e)
         except Exception:
             raise HTTPException(status_code=422, detail="the date/time values specified are in an incorrect format")
 

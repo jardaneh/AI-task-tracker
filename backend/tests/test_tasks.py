@@ -1,7 +1,7 @@
 from tokenize import String
 
 from fastapi.testclient import TestClient
-from app.models import TaskStatus, TaskPriority
+from app.models import TaskStatus, TaskPriority, ActivityType
 
 
 def test_create_task_valid_returns_201_with_full_body(client: TestClient):
@@ -309,3 +309,66 @@ def test_list_tasks_filter_by_comments_returns_422(client: TestClient):
     # 'comments' is not a supported query parameter; sending it should yield a 422 from FastAPI
     r = client.get("/tasks", params={"comments": "something"})
     assert r.status_code == 422
+
+
+def test_list_activities_returns_200_and_empty_list(client: TestClient):
+    # no activity entries exist in fresh storage
+    r = client.get("/activity")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_list_activities_filter_by_from_to_type_returns_200_and_only_matches(client: TestClient):
+    # create two tasks; capture their creation timestamps
+    r1 = client.post("/tasks", json={"title": "task-a"})
+    assert r1.status_code == 201
+    a = r1.json()
+    r2 = client.post("/tasks", json={"title": "task-b"})
+    assert r2.status_code == 201
+    b = r2.json()
+
+    # cause some additional activity: update task-a and delete task-b
+    client.patch(f"/tasks/{a['id']}", json={"status": TaskStatus.IN_PROGRESS.value})
+    client.delete(f"/tasks/{b['id']}")
+
+    print(b["created_at"])
+    # filter activity to only include the creation entry for task-b using exact from/to timestamps and type
+    params = {"start": b["created_at"], "end": b["created_at"], "type": ActivityType.CREATE.value}
+    r = client.get("/activity", params=params)
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    item = data[0]
+    assert item["type"] == ActivityType.CREATE.value
+    assert item["task_uuid"] == b["id"]
+
+
+def test_list_activities_filter_by_task_from_to_returns_200_and_only_matches(client: TestClient):
+    # create a task and then update it to generate multiple activities for that task
+    r = client.post("/tasks", json={"title": "task-x"})
+    assert r.status_code == 201
+    t = r.json()
+
+    # update the task to add another activity
+    r_up = client.patch(f"/tasks/{t['id']}", json={"description": "updated"})
+    assert r_up.status_code == 200
+
+    # create an unrelated task to ensure it is not returned
+    client.post("/tasks", json={"title": "other"})
+
+    params = {"task": t["id"], "start": t["created_at"], "end": r_up.json()["updated_at"]}
+    r2 = client.get("/activity", params=params)
+    assert r2.status_code == 200
+    data = r2.json()
+    assert isinstance(data, list)
+    # Should include the create and the update activity for this task
+    assert len(data) == 2
+    for item in data:
+        assert item["task_uuid"] == t["id"]
+
+
+def test_list_activities_filter_by_start_returns_422(client: TestClient):
+    r = client.get("/activity", params={"start": "not-a-date"})
+    assert r.status_code == 422
+    assert r.json().get("detail") == "the date/time values specified are in an incorrect format"
