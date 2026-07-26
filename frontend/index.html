@@ -179,6 +179,58 @@
             margin-top: 0.25rem;
         }
 
+        .filter-panel {
+            width: min(100%, 1280px);
+            margin: 0 0 1rem;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--surface-strong);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.85rem;
+            align-items: end;
+        }
+
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .filter-field label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .filter-field input,
+        .filter-field select {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.7rem 0.8rem;
+            font: inherit;
+            color: var(--text);
+            background: #ffffff;
+        }
+
+        .filter-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-button {
+            min-width: 120px;
+        }
+
         .secondary-button {
             border: none;
             border-radius: 999px;
@@ -344,6 +396,34 @@
   </header>
 
   <main>
+    <section class="filter-panel" aria-label="Task filters">
+      <div class="filter-grid">
+        <div class="filter-field">
+          <label for="filter-status-select">Status</label>
+          <select id="filter-status-select" name="status">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-priority-select">Priority</label>
+          <select id="filter-priority-select" name="priority">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filter-assignee-input">Assignee</label>
+          <input id="filter-assignee-input" name="assignee" type="text" maxlength="50" />
+        </div>
+        <div class="filter-field">
+          <label for="filter-title-input">Title/Details</label>
+          <input id="filter-title-input" name="title" type="text" maxlength="100" />
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button id="clear-filter-button" class="secondary-button filter-button" type="button">Clear Filter</button>
+        <button id="apply-filter-button" class="edit-button filter-button" type="button">Apply Filter</button>
+      </div>
+    </section>
     <section id="board" class="board" aria-live="polite"></section>
   </main>
 
@@ -403,6 +483,18 @@
   <script>
     const API_BASE = "http://localhost:8000";
     const STATUSES = ["ToDo", "InProgress", "Done"];
+    const STATUS_OPTIONS = [
+        { value: "", label: "All" },
+        { value: "ToDo", label: "To Do" },
+        { value: "InProgress", label: "In Progress" },
+        { value: "Done", label: "Done" }
+    ];
+    const PRIORITY_OPTIONS = [
+        { value: "", label: "All" },
+        { value: "High", label: "High" },
+        { value: "Medium", label: "Medium" },
+        { value: "Low", label: "Low" }
+    ];
     const STATUS_LABELS = {
         ToDo: "To Do",
         InProgress: "In Progress",
@@ -433,6 +525,12 @@
     const modalAssigneeInput = document.getElementById("task-assignee-input");
     const formBanner = document.getElementById("form-banner");
     const newTaskButton = document.getElementById("new-task-button");
+    const filterStatusSelect = document.getElementById("filter-status-select");
+    const filterPrioritySelect = document.getElementById("filter-priority-select");
+    const filterAssigneeInput = document.getElementById("filter-assignee-input");
+    const filterTitleInput = document.getElementById("filter-title-input");
+    const clearFilterButton = document.getElementById("clear-filter-button");
+    const applyFilterButton = document.getElementById("apply-filter-button");
 
     function createElement(tagName, className) {
         const element = document.createElement(tagName);
@@ -478,6 +576,36 @@
         const feedback = createElement("div", "board-feedback");
         feedback.textContent = message;
         return feedback;
+    }
+
+    function populateSelectOptions(selectElement, optionConfigs) {
+        selectElement.replaceChildren();
+        optionConfigs.forEach(function appendOption(optionConfig) {
+            const option = createElement("option");
+            option.value = optionConfig.value;
+            option.textContent = optionConfig.label;
+            selectElement.appendChild(option);
+        });
+    }
+
+    function buildTaskQueryString() {
+        const query = new URLSearchParams();
+
+        if (filterStatusSelect.value) {
+            query.set("status", filterStatusSelect.value);
+        }
+        if (filterPrioritySelect.value) {
+            query.set("priority", filterPrioritySelect.value);
+        }
+        if (filterAssigneeInput.value.trim()) {
+            query.set("assignee", filterAssigneeInput.value.trim());
+        }
+        if (filterTitleInput.value.trim()) {
+            query.set("text", filterTitleInput.value.trim());
+        }
+
+        const queryString = query.toString();
+        return queryString ? `?${queryString}` : "";
     }
 
     function handleTaskCardDragStart(event) {
@@ -593,7 +721,7 @@
     }
 
     function handleTaskRefreshClick() {
-        fetchTasks();
+        fetchTasks(buildTaskQueryString());
     }
 
     function handleBoardColumnDragOver(event) {
@@ -1005,12 +1133,12 @@
         }
     }
 
-    async function fetchTasks() {
+    async function fetchTasks(queryString = "") {
         boardDisplayState = "loading";
         renderBoard(taskCollection);
 
         try {
-            const response = await fetch(`${API_BASE}/tasks`);
+            const response = await fetch(`${API_BASE}/tasks${queryString}`);
             if (!response.ok) {
                 throw new Error(`Request failed with status ${response.status}`);
             }
@@ -1026,6 +1154,18 @@
             boardDisplayState = "error";
             renderBoard(taskCollection);
         }
+    }
+
+    function handleApplyFilterClick() {
+        fetchTasks(buildTaskQueryString());
+    }
+
+    function handleClearFilterClick() {
+        filterStatusSelect.value = "";
+        filterPrioritySelect.value = "";
+        filterAssigneeInput.value = "";
+        filterTitleInput.value = "";
+        fetchTasks();
     }
 
     function handleNewTaskButtonClick() {
@@ -1052,9 +1192,14 @@
         }
     }
 
+    populateSelectOptions(filterStatusSelect, STATUS_OPTIONS);
+    populateSelectOptions(filterPrioritySelect, PRIORITY_OPTIONS);
+
     newTaskButton.onclick = handleNewTaskButtonClick;
     modalCloseButton.onclick = handleModalCloseButtonClick;
     modalCancelButton.onclick = handleModalCloseButtonClick;
+    clearFilterButton.onclick = handleClearFilterClick;
+    applyFilterButton.onclick = handleApplyFilterClick;
 
     document.querySelectorAll("[data-close-modal]").forEach(assignModalCloseTrigger);
     function assignModalCloseTrigger(closeTriggerElement) {
