@@ -14,6 +14,18 @@ _activities_by_timestamp: dict[datetime, Activity] = {}
 _activities_by_task: dict[str, dict[datetime, Activity]] = {}
 
 
+def _normalize_string(value: Optional[str]) -> str:
+    """Normalize a string for matching: return lowercase, stripped, and
+    with all non-alphanumeric a-z0-9 characters removed. Returns empty string
+    for None or when normalization yields nothing.
+    """
+    if value is None:
+        return ""
+    v = value.strip().lower()
+    v = re.sub(r"[^a-z0-9]+", "", v)
+    return v
+
+
 def add_task(payload: TaskCreate) -> TaskResponse:
     now = datetime.now(timezone.utc)
     task_id = str(uuid.uuid4())
@@ -66,29 +78,23 @@ def get_all_tasks(
 
     # Normalize and apply text filter (title or description) if provided
     if text is not None:
-        text_norm = text.strip().lower()
-        # remove any character that is not a-z or 0-9
-        text_norm = re.sub(r"[^a-z0-9]+", "", text_norm)
+        text_norm = _normalize_string(text)
         if text_norm:
             filtered: List[TaskResponse] = []
             for task in results:
-                title = (task.title or "").strip().lower()
-                title_norm = re.sub(r"[^a-z0-9]+", "", title)
-                description = (task.description or "").strip().lower()
-                description_norm = re.sub(r"[^a-z0-9]+", "", description)
+                title_norm = _normalize_string(task.title)
+                description_norm = _normalize_string(task.description)
                 if text_norm in title_norm or text_norm in description_norm:
                     filtered.append(task)
             results = filtered
 
     # Normalize and apply assignee filter if provided
     if assignee is not None:
-        assignee_norm = assignee.strip().lower()
-        assignee_norm = re.sub(r"[^a-z0-9]+", "", assignee_norm)
+        assignee_norm = _normalize_string(assignee)
         if assignee_norm:
             filtered: List[TaskResponse] = []
             for task in results:
-                a = (task.assignee or "").strip().lower()
-                a_norm = re.sub(r"[^a-z0-9]+", "", a)
+                a_norm = _normalize_string(task.assignee)
                 if assignee_norm in a_norm:
                     filtered.append(task)
             results = filtered
