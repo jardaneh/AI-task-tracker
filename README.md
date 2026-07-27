@@ -90,3 +90,16 @@ Expected response shape:
 Once the server is running, open the following URL in your browser:
 
 http://localhost:8000/docs
+
+
+## Running the frontend
+
+```bash
+source venv/bin/activate
+cd frontend
+python3 -m http.server 8080
+```
+
+Once the Python HTTP server is running under the frontend directory, open the following URL in your browser:
+
+http://localhost:8080/index.html
