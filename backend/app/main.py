@@ -44,7 +44,7 @@ def health_check():
 
     Example:
         GET /health -> 200
-        {"status": "ok", "timestamp": "2026-07-28T12:00:00+00:00"}
+        {"status": "ok", "timestamp": "2026-07-28T12:00:00.000000+00:00"}
     """
     return {
         "status": "ok",
@@ -71,8 +71,7 @@ def create_task(payload: TaskCreate) -> TaskResponse:
         ``id`` and ``created_at``/``updated_at`` timestamps.
 
     Raises:
-        HTTPException: 422 if ``payload`` fails Pydantic validation
-            (raised by FastAPI before this function body runs).
+         RequestValidationError: FastAPI returns 422 (via RequestValidationError, raised internally by FastAPI before this function runs).
 
     Example:
         POST /tasks {"title": "Buy milk"} -> 201
@@ -101,7 +100,7 @@ def list_tasks(status: TaskStatus | None = None, priority: TaskPriority | None =
     return storage.get_all_tasks(status=status, priority=priority)
 
 
-@app.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
+@app.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"], responses={404: {"description": "Task not found"}})
 def get_task(task_id: str) -> TaskResponse:
     """Return a single task by id or raise 404 if not found.
 
@@ -123,7 +122,7 @@ def get_task(task_id: str) -> TaskResponse:
     return task
 
 
-@app.patch("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
+@app.patch("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"], responses={404: {"description": "Task not found"}})
 def update_task(task_id: str, payload: TaskUpdate) -> TaskResponse:
     """Update an existing task by delegating to the storage layer.
 
@@ -161,7 +160,7 @@ def update_task(task_id: str, payload: TaskUpdate) -> TaskResponse:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
     return updated
 
-@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["tasks"])
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["tasks"], responses={404: {"description": "Task not found"}})
 def delete_task(task_id: str) -> None:
     """Delete a task by id or raise 404 if not found.
 
