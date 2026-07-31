@@ -194,5 +194,4 @@ README.md
 
 ## Technical notes / decisions
 
-No `docs/decisions` directory or architecture decision log currently
-exists in this repository. [VERIFY]: if one gets added later, link it here.
+[Technical Note](../Module4/Video6/TechNote.md)
