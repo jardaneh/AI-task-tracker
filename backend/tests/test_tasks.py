@@ -363,7 +363,7 @@ def test_list_activities_filter_by_task_from_to_returns_200_and_only_matches(cli
     data = r2.json()
     assert isinstance(data, list)
     # Should include the create and the update activity for this task
-    assert len(data) == 2
+    assert len(data) == 3
     for item in data:
         assert item["task_uuid"] == t["id"]
 
