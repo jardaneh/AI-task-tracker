@@ -1,34 +1,34 @@
 # Final AI Review and Ownership Evidence
 
 ## AGENTS.md guardrails
-- Repo-specific stack and commands included: yes/no
-- Docs-first/read-first guardrail included: yes/no
-- Unexpected app/frontend edits rule included: yes/no
+- Repo-specific stack and commands included: yes
+- Docs-first/read-first guardrail included: yes
+- Unexpected app/frontend edits rule included: no
 
 ## AI code review mini-log
 | AI comment | Grade: Useful / Noise / Wrong | Reason | Verification or decision |
 |---|---|---|---|
-| | | | |
-| | | | |
-| | | | |
+| Explicit "title": null in PATCH wipes title to None | Useful | Can be quite risky as PATCH calls directly to the server with "null" values for the "title" field can corrupt a task's data by settings its title to null | It is better if thjat is resolved by simply disallowing null values |
+| Non-string title raises bare TypeError, causing an unhandled 500 instead of 422 | Useful | Passing a plain number as a task's title should be accepted. An unexpected 500 server error is of no use. | POST /tasks {"title": 123} → 500. Pydantic v2 only auto-wraps ValueError/AssertionError, not TypeError |
+| New title validators duplicate utils.trim_title's strip logic instead of reusing it | Noise | Doesn't have serious ramifications with respect to the tasks' data | Completely ignore for the time being |
 
 ## AI security mini-review
 | Finding | File evidence | Grade: Valid / False Positive / Noise | Reason | Next action |
 |---|---|---|---|---|
-| | | | | |
-| | | | | |
-| | | | | |
+| Explicit JSON `null` values can corrupt stored task fields despite their response types being non-nullable. | backend/app/storage.py:90-111; `exclude_unset=True` preserves explicitly supplied `null`; `setattr()` writes it without assignment validation. | Valid | Explicit `null` updates can bypass intended field invariants and corrupt in-memory task data. | Reject explicit `null` for non-nullable update fields, or enable assignment validation and add regression tests for every optional update field. |
+| `description` and `assignee` have no server-side length limits. | backend/app/models.py:28,31,50-54; Pydantic validates title length only (`:42-43`, `:65-66`). Description and assignee are unconstrained strings; frontend limits do not protect direct API callers. | Valid | Direct API callers can submit arbitrarily large descriptions and assignee values; frontend limits are not security controls. | Add explicit maximum lengths and consider request-body/rate limits at the deployment layer. |
+| Frontend validation is weaker than backend validation and the API endpoint is fixed in source. | frontend/index.html:363,391,404,904-1024; Frontend limits title to 120 and assignee to 80, but description has no limit; direct API requests bypass all UI limits. Errors are logged with `console.error`. | Noise | The frontend’s weaker limits do not bypass backend validation; the server remains the enforcement point. The hardcoded localhost API URL is documented for local use. | Treat frontend checks as usability only; centralize configurable API settings and enforce all security/resource constraints server-side. |
 
 ## Manual security check
-[What I checked myself, what I found, and why it matters.]
+Carried out some manual tests where I included characters in the different task fields that are of special significance in HTML and require escape sequences; such as the ampersand '&', less than '<' and greater than '>' characters in addition to the single ''' and double '"' quote characters. I wanted to ensure that these will not corrupt how HTML is rendered. I, fortunatly found out that it doesn't interfere with the display of the task cards.
 
 ## One AI output I rejected or corrected
-[What AI suggested, why I did not accept it as-is, and what I did instead.]
+When reviewing claims made by the Google docstrings added for different functions, Claude Code flagged the docstring for the create_task function which is marked as raising an HTTPException when 422 is returned due to failed Pydantic validation. Claude Code went on to say that in reality it is FastAPI that raises a RequestValidationError which is not a subclass of HTTPException. The error is handled by FastAPI which returns 422. It suggested I modify the docstring to make it clear that it is FastAPI that is returning 422 when handling the RequestValidationError. I did nothing and ignored the suggestion for the time being as I saw it as a very low priority issue.
 
 ## Three AI usage rules
-1. Never paste:
-2. Always verify:
-3. Record AI contributions by:
+1. Never paste: Private or authentication data including: security tokens, credentails, PII, addresses, etc...
+2. Always verify: AI output.
+3. Record AI contributions by: Summarizing responses and recording them in journals along with prompts. For code diffs, one can associate git commits to logged prompts by numbering prompts for example, and including the prompt number in the git commit comment for the diff generated by an AI tool.
 
 ## Ownership statement
-[3-5 sentences explaining why I am comfortable submitting this repo as my work.]
+I feel comfortable submitting this repo as my work because I've spent numerous hours painstakingly checking prompts and reviewing their outcome. I've also selected the AI suggestions and proposals to adhere to and those to reject or delay for a later time. So it would be fair to say that this repo may have been formed by many small fragments generated by AI tools, but it is the organization of these fragments, the review of AI generated material and filling in the documentation is what makes this repo what it is.
