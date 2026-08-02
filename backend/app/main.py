@@ -34,7 +34,17 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check():
-    """Basic liveness check for the API."""
+    """Report basic liveness of the API.
+
+    Returns:
+        dict: A JSON-serializable mapping with:
+            status (str): Always ``"ok"`` when the service can respond.
+            timestamp (str): Current UTC time as an ISO 8601 string.
+
+    Example:
+        GET /health -> 200
+        {"status": "ok", "timestamp": "2026-08-02T15:25:01.137666+00:00"}
+    """
     return {
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -45,8 +55,23 @@ def health_check():
 def create_task(payload: TaskCreate) -> TaskResponse:
     """Create a new task by delegating to the storage layer.
 
-    Validation (missing/blank/too long title, invalid status/priority,
-    unknown fields) is handled by Pydantic via the TaskCreate schema.
+    Args:
+        payload (TaskCreate): Task fields supplied by the client. ``title``
+            is required, trimmed, and 1-200 characters; ``status`` and
+            ``priority`` default to ToDo/Medium when omitted.
+
+    Returns:
+        TaskResponse: The newly created task, including the server-assigned
+        ``id``, ``created_at``, and ``updated_at``.
+
+    Raises:
+        HTTPException: 422, raised by FastAPI/Pydantic before this
+            function body runs, if ``payload`` fails validation against the
+            TaskCreate schema (missing/blank/too-long title, invalid
+            status/priority value, or an unknown field).
+
+    Example:
+        POST /tasks {"title": "Fix bug"} -> 201
     """
     return storage.add_task(payload)
 
@@ -60,7 +85,24 @@ def list_tasks(
 ) -> list[TaskResponse]:
     """Return a list of tasks, optionally filtered by status, priority, text, and assignee.
 
-    Reject unknown query parameters with a 422 and an error message naming the offending parameter.
+    Args:
+        request (Request): Incoming request, inspected directly to detect
+            any query parameter outside the allowed set.
+        status (TaskStatus | None): Exact-match filter on task status.
+        priority (TaskPriority | None): Exact-match filter on task priority.
+        text (str | None): Substring filter (case-insensitive, normalized)
+            matched against a task's title or description.
+        assignee (str | None): Substring filter (case-insensitive,
+            normalized) matched against a task's assignee.
+
+    Returns:
+        list[TaskResponse]: Tasks matching all of the provided filters
+        (filters combine with AND). Empty list if none match.
+
+    Raises:
+        HTTPException: 422 if the request includes any query parameter
+            other than ``status``, ``priority``, ``text``, or ``assignee``;
+            the error detail names the first such offending parameter.
     """
     # allowed query param names (FastAPI will have already validated enum/typing for known params)
     allowed = {"status", "priority", "text", "assignee"}
@@ -78,7 +120,17 @@ def list_tasks(
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"])
 def get_task(task_id: str) -> TaskResponse:
-    """Return a single task by id or raise 404 if not found."""
+    """Return a single task by id.
+
+    Args:
+        task_id (str): UUID of the task to look up.
+
+    Returns:
+        TaskResponse: The matching task.
+
+    Raises:
+        HTTPException: 404 if no task with ``task_id`` exists.
+    """
     task = storage.get_task_by_id(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
@@ -89,9 +141,23 @@ def get_task(task_id: str) -> TaskResponse:
 def update_task(task_id: str, payload: TaskUpdate) -> TaskResponse:
     """Update an existing task by delegating to the storage layer.
 
-    Behavior changes:
-    - If payload.status is None, skip transition validation.
-    - If payload.status is provided, validate the transition against business rules.
+    Args:
+        task_id (str): UUID of the task to update.
+        payload (TaskUpdate): Fields to change; unset fields are left as-is
+            (partial update semantics via ``exclude_unset``). If
+            ``payload.status`` is provided, it is validated against the
+            current status using business-rule transition checks before
+            being applied; if it is ``None``, transition validation is
+            skipped entirely.
+
+    Returns:
+        TaskResponse: The task after applying the update.
+
+    Raises:
+        HTTPException: 404 if no task with ``task_id`` exists.
+        HTTPException: 422 if ``payload.status`` is provided and the
+            transition from the task's current status is not allowed (see
+            ``business_rules.validate_status_transition``).
     """
     # Only validate transitions when a new status is provided.
     if payload.status is not None:
@@ -107,7 +173,17 @@ def update_task(task_id: str, payload: TaskUpdate) -> TaskResponse:
 
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["tasks"])
 def delete_task(task_id: str) -> None:
-    """Delete a task by id or raise 404 if not found."""
+    """Delete a task by id.
+
+    Args:
+        task_id (str): UUID of the task to delete.
+
+    Returns:
+        None: Responds with 204 No Content on success.
+
+    Raises:
+        HTTPException: 404 if no task with ``task_id`` exists.
+    """
     deleted = storage.delete_task(task_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
@@ -122,12 +198,32 @@ def list_activity(
     end: str | None = None,
     type: ActivityType | None = None,
 ) -> list[Activity]:
-    """List activity entries filtered by optional query params.
+    """List activity log entries filtered by optional query params.
 
-    Only the query params (task, start, end, type) are allowed. Dates must be
-    ISO8601 strings. Unknown query params return 422. Invalid date formats
-    return 422 with a specific message. If task is provided but does not
-    exist, return 404.
+    Args:
+        request (Request): Incoming request, inspected directly to detect
+            any query parameter outside the allowed set.
+        task (str | None): If provided, only entries for this task id are
+            returned; the task must exist.
+        start (str | None): ISO 8601 timestamp (a trailing ``Z`` is accepted
+            and normalized to ``+00:00``); entries strictly before this are
+            excluded.
+        end (str | None): ISO 8601 timestamp (a trailing ``Z`` is accepted
+            and normalized to ``+00:00``); entries strictly after this are
+            excluded.
+        type (ActivityType | None): Exact-match filter on activity type
+            (create, update, status-update, delete).
+
+    Returns:
+        list[Activity]: Matching activity entries, ordered most-recent-first.
+
+    Raises:
+        HTTPException: 422 if the request includes any query parameter
+            other than ``task``, ``start``, ``end``, or ``type``.
+        HTTPException: 404 if ``task`` is provided but no task with that id
+            exists.
+        HTTPException: 422 if ``start`` or ``end`` is not a valid ISO 8601
+            string.
     """
     allowed = {"task", "start", "end", "type"}
     received = set(request.query_params.keys())
