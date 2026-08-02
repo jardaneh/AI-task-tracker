@@ -16,7 +16,7 @@ APP_ENV = os.getenv("APP_ENV", "development")
 
 app = FastAPI(
     title="Task Tracker API",
-    description=f"Module 1 Task Tracker REST API - skeleton project (env: {APP_ENV})",
+    description=f"Task Tracker REST API - course project (env: {APP_ENV})",
     version="0.1.0",
 )
 

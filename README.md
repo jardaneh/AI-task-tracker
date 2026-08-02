@@ -1,7 +1,7 @@
 # Task Tracker
 
 A minimal FastAPI + vanilla JavaScript Task Tracker application, built as a
-learning project for the "AI Assisted Coding" course (Module 4). It exposes
+learning project for the "AI Assisted Coding" course. It exposes
 a REST API for creating, updating, and deleting tasks on a Kanban-style
 board (`ToDo` / `InProgress` / `Done`), plus an activity log of task
 changes. The app is intentionally single-user and non-concurrent — see
@@ -183,14 +183,16 @@ README.md
   against concurrent writes.
 - **Status transitions are restricted**, enforced in
   `backend/app/business_rules.py`: only `ToDo → InProgress`,
-  `InProgress → Done`, and `InProgress → ToDo` are allowed. Status changes
+  `InProgress → Done`, and `Done → InProgress` are allowed. Status changes
   are meant to be driven by moving cards on the board, not a free dropdown.
 - **CORS is restricted** to `http://localhost:8080` and
   `http://127.0.0.1:8080` in `backend/app/main.py` — update it if you serve
   the frontend elsewhere.
 - **Some files are dead code**: `backend/app/schemas.py` and
   `backend/app/routes/tasks.py` are leftovers from early scaffolding and
-  are not imported or mounted anywhere live.
+  are not imported or mounted anywhere live. Furthermore, `backend/app/schemas.py`
+  can cause an ImportError if it is ever imported from. It import types that
+  are not found in the file it is imported from.
 - See [`CLAUDE.md`](CLAUDE.md) for a fuller architecture map, aimed at AI
   coding agents working in this repo.
 

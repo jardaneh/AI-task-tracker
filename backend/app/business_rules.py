@@ -12,7 +12,7 @@ def validate_status_transition(current: TaskStatus, new: TaskStatus) -> None:
     """Validate a task status transition against the allowed Kanban graph.
 
     Allowed transitions are exactly: ToDo->InProgress, InProgress->Done,
-    and InProgress->ToDo. Any other pair, including a status transitioning
+    and Done->InProgress. Any other pair, including a status transitioning
     to itself, is rejected.
 
     Args:

@@ -83,9 +83,9 @@ Status transition rules, as implemented in `business_rules.py` (`VALID_TRANSITIO
 |---|---|---|
 | ToDo | InProgress | ✅ |
 | InProgress | Done | ✅ |
-| InProgress | ToDo | ✅ |
+| Done | InProgress | ✅ |
 | ToDo | Done | ❌ (no skipping) |
-| Done | InProgress | ❌ |
+| InProgress | ToDo | ❌ |
 | Done | ToDo | ❌ |
 | any status | itself | ❌ (same-status "transition" is rejected, not a no-op) |
 

@@ -90,3 +90,7 @@ pytest -v
 
 ## Documentation claim-vs-reality log
 | Claim checked | Evidence used | Result | Change made, if any |
+|---|---|---|---|
+| allowed status transitions are ToDo→InProgress, InProgress→Done, InProgress→ToDo | PATCH a task from Done to InProgress → 200; from InProgress to ToDo → 422 ("Allowed transitions: ['Done->InProgress', 'InProgress->Done',  'ToDo->InProgress']") | False | Fix the documentation in README.md, CLAUDE.md & the docstring for the validate_status_transition function |
+| README frames this as a mature "Module 4" project with full CRUD operations for tasks | The openapi.json info block I pulled (title, description, version) metions a "Module 1" | False | Update the FastAPI constructor and the README.md file. |
+| README describes backend/app/schemas.py as "Older, unused TaskCreate/TaskUpdate/TaskRead models (dead code)." | It is worst than "unused"; the module would raise ImportError if anything ever tried to import it because it imports definitions that do not exist in models.py | Inaccurate | Modify the README file to make it clear that it would be catastrophic to import from the schemas.py file. |
