@@ -37,9 +37,14 @@
 
 
 ## CI evidence
-- Workflow file:
-AI-Assisted Coding - Final Course Project Brief (Simplified)- Latest run link or note:
+- Workflow file: [ci.yml](../.github/workflows/ci.yml)
+- Broken run link: [Red Workflow](https://github.com/jardaneh/AI-task-tracker/actions/runs/30757328509)
+- Latest run link or note: [Green Workflow](https://github.com/jardaneh/AI-task-tracker/actions/runs/30757451473)
 - Test command used by CI:
+```bash
+cd backend
+pytest -v
+```
 - Shortcut check: no continue-on-error / no || true / pytest is not skipped.
 
 ## Docker evidence
