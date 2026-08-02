@@ -103,3 +103,40 @@ python3 -m http.server 8080
 Once the Python HTTP server is running under the frontend directory, open the following URL in your browser:
 
 http://localhost:8080/index.html
+
+
+## Final Project
+Branch reviewed: final-project
+
+### What this submission demonstrates
+- Existing Task Tracker app still runs inside the intended course scope.
+- CI runs the pytest suite on push and/or pull request.
+- Docker image builds and runs with /health returning 200.
+- AI review, security, and ownership evidence is in docs/.
+
+### How to run locally
+```bash
+source venv/bin/activate
+cd backend
+uvicorn app.form:app
+```
+
+### How to run tests
+```bash
+source venv/bin/activate
+cd backend
+pytest tests/
+```
+
+### How to run with Docker
+
+
+### Evidence files
+- docs/release-evidence.md
+- docs/final-ai-review.md
+- docs/ai-playbook.md
+
+### AI assistance summary
+AI helped draft or review: docs.
+I verified the work by: manual scan.
+One AI suggestion I rejected or corrected: [brief note].
