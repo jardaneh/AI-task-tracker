@@ -129,7 +129,14 @@ pytest tests/
 ```
 
 ### How to run with Docker
-
+```bash
+docker build -t task-tracker:prod .
+docker run -d --name tt-prod -p 8000:8000 task-tracker:prod
+```
+To stop and remove the docker image
+```bash
+docker rm -f tt-prod
+```
 
 ### Evidence files
 - docs/release-evidence.md

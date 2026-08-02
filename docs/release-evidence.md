@@ -49,10 +49,44 @@ pytest -v
 
 ## Docker evidence
 - Build command:
+  ```bash
+  docker build -t task-tracker:prod .
+  ```
 - Run command:
+  ```bash
+  docker run -d --name tt-prod -p 8000:8000 task-tracker:prod
+  ```
 - /health check:
+  ```bash
+  curl -i http://localhost:8000/health
+  ```
+  This should print the following to the console:
+  ```
+  HTTP/1.1 200 OK
+  date: Sun, 02 Aug 2026 18:00:55 GMT
+  server: uvicorn
+  content-length: 62
+  content-type: application/json
+
+  {"status":"ok","timestamp":"2026-08-02T18:00:55.269100+00:00"}
+  ```
 - Non-root check, if implemented:
+  ```bash
+  docker exec tt-prod whoami
+  ```
+  Should print **app** and not any user such as **root**
 - No-baked-secrets check:
+  ```bash
+  printf 'FROM alpine\nWORKDIR /ctx\nCOPY . .\nCMD ["sh","-c","find /ctx -maxdepth 3"]\n' | docker build -q -t context-check -f - .
+  docker run --rm context-check | grep -E '\.env$|\.env\.|/\.git|venv/|__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache'
+  docker rmi context-check
+  grep -n '^COPY' Dockerfile
+  ```
+  The grep in the second line should come up empty
+  The grep in the fourth line should NOT come up with anything other than:
+  - requirements.txt
+  - /opt/venv
+  - backend/app
 
 ## Documentation claim-vs-reality log
 | Claim checked | Evidence used | Result | Change made, if any |
