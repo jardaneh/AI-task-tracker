@@ -168,7 +168,7 @@ def update_task(task_id: str, payload: TaskUpdate) -> Optional[TaskResponse]:
     existing = _tasks.get(task_id)
     if existing is None:
         return None
-    data = payload.model_dump(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True, exclude_none=True)
     changed = False
     updated_fields: dict = {}
     status_changed = False
