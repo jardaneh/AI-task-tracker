@@ -1,109 +1,212 @@
-# Task Tracker API (Module 1)
+# Task Tracker
 
-A minimal FastAPI backend skeleton for a Task Tracker application, built as
-part of a learning project. This stage of the project only includes the
-application scaffold, folder structure, and a `/health` endpoint. CRUD
-endpoints, storage logic, and the frontend will be added in later phases.
+A minimal FastAPI + vanilla JavaScript Task Tracker application, built as a
+learning project for the "AI Assisted Coding" course (Module 4). It exposes
+a REST API for creating, updating, and deleting tasks on a Kanban-style
+board (`ToDo` / `InProgress` / `Done`), plus an activity log of task
+changes. The app is intentionally single-user and non-concurrent — see
+[Project Conventions and Current Limitations](#project-conventions-and-current-limitations)
+for what is deliberately out of scope.
 
-## Architecture Notes
+## Prerequisites
 
-- **Storage:** The project will use in-memory storage with JSON file
-  persistence instead of a database like SQLite. This keeps the project
-  dependency-free, easy to reset/seed for testing, and simple to reason
-  about for a single-user, non-concurrent learning project.
-- **Persistence timing:** Writes to the JSON file will occur immediately
-  after each create/update/delete operation rather than on an interval,
-  since the app is intended for single-user, non-concurrent use.
-- **Status updates:** Task status changes are intended to be driven by
-  moving cards on a Kanban-style board (not a dropdown control).
-- **Production considerations (not implemented here):** A real persistent
-  datastore and safeguards against race conditions/concurrent writes would
-  be required before this design could be used in a multi-user or
-  production setting.
+- Python 3.10.12 (matches the interpreter pinned in `Dockerfile` and
+  `.github/workflows/ci.yml`)
+- pip
+- Docker, only if you want to run the containerized build (see
+  [Run with Docker](#run-with-docker))
+- A modern web browser, to use the frontend
 
-## Project Structure
+## Local Setup
 
-backend/
-  app/
-    main.py           # FastAPI app instance, /health endpoint
-    routes/
-      tasks.py         # Placeholder router for future task CRUD endpoints
-    schemas.py          # Pydantic schemas (TaskCreate, TaskUpdate, TaskRead)
-    storage.py           # In-memory repository skeleton
-    models.py            # Status/Priority enums
-    utils.py              # Validation helpers
-    static/                # Reserved for future frontend files
-README.md
-requirements.txt
-.env.example
-.gitignore
+Run from the repo root:
 
-## Setup Instructions
-
-1. Clone or copy this project to your local machine.
-2. Create a virtual environment and install dependencies (see commands below).
-3. Copy `.env.example` to `.env` and adjust values if needed.
-4. Run the development server.
-
-### Create virtual environment and install dependencies
-
-**Linux / macOS:**
-
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+```
 
+Windows PowerShell: replace the second line with `.\venv\Scripts\Activate.ps1`.
 
-**Windows (PowerShell):**
+`.env` currently sets `APP_ENV=development` and `PORT=8000`. `[VERIFY]`
+`PORT` is not read anywhere in `backend/app/main.py` — the actual listen
+port is set by the `--port` flag on the `uvicorn` command below, not by
+this variable.
 
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+## Run the App Locally
 
-
-### Run the server
-
-The FastAPI app lives at `backend/app/main.py`, so run uvicorn from inside
-the `backend/` directory:
-
-cd backend
-uvicorn app.main:app --reload --port 8000
-
-
-## Testing the Health Endpoint
-
-With the server running, test it with curl:
-
-curl http://localhost:8000/health
-
-
-Expected response shape:
-
-{
-  "status": "ok",
-  "timestamp": "2025-01-01T12:00:00.000000+00:00"
-}
-
-
-## Swagger / Interactive API Docs
-
-Once the server is running, open the following URL in your browser:
-
-http://localhost:8000/docs
-
-
-## Running the frontend
+Backend, from the repo root:
 
 ```bash
 source venv/bin/activate
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
+
+Check it's up:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Interactive API docs: http://localhost:8000/docs
+
+Frontend, in a separate terminal, also from the repo root:
+
+```bash
 cd frontend
 python3 -m http.server 8080
 ```
 
-Once the Python HTTP server is running under the frontend directory, open the following URL in your browser:
+Open http://localhost:8080/index.html. The frontend calls the backend at
+`http://localhost:8000`; CORS in `backend/app/main.py` only allows
+`http://localhost:8080` and `http://127.0.0.1:8080`, so serving the
+frontend from any other origin will be blocked by the browser.
 
-http://localhost:8080/index.html
+## Run Tests
 
+From the repo root:
+
+```bash
+source venv/bin/activate
+cd backend
+pytest -v
+```
+
+Tests must be run with `backend/` as the working directory: there is no
+root `conftest.py` or `pyproject.toml`, and `backend/tests/__init__.py` is
+what makes pytest resolve the `app` package. Every test resets the
+in-memory store automatically via the autouse fixture in
+`backend/tests/conftest.py`.
+
+## Run with Docker
+
+From the repo root:
+
+```bash
+docker build -t task-tracker .
+docker run --rm -p 8000:8000 --name task-tracker task-tracker
+```
+
+Check it's up:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Stop it:
+
+```bash
+docker stop task-tracker
+```
+
+Notes, read from `Dockerfile`:
+- Base image is `python:3.10.12-slim`, built in two stages (install
+  dependencies, then copy into a minimal runtime image).
+- The container runs as a non-root `app` user and has a built-in
+  `HEALTHCHECK` against `/health`.
+- Only `backend/app` is copied into the image — the container serves the
+  API only. `frontend/`, `tests/`, and `docs/` are not included and are not
+  needed to run it.
+- `[VERIFY]` these commands are derived directly from `Dockerfile`; they
+  were not executed in this session to confirm the image builds and
+  `/health` responds. A prior manual verification is recorded in
+  [`docs/release-evidence.md`](docs/release-evidence.md) and in the
+  [Final Project](#final-project) section below.
+
+This project does not include deployment, orchestration, or
+production-hosting configuration — the Docker image is for local use only.
+
+## CI Workflow Summary
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every `push`
+and `pull_request`:
+
+1. Checks out the repository (`actions/checkout@v4`).
+2. Sets up Python, pinned to `3.10.12` (`actions/setup-python@v5`) — not
+   `latest` or an unspecified version.
+3. Installs dependencies with `python -m pip install --upgrade pip` and
+   `pip install -r requirements.txt`.
+4. Runs `pytest -v` with `working-directory: backend`.
+
+There is no deployment step, and no `continue-on-error`, `|| true`, or
+output-suppressing step — a failing test fails the workflow.
+
+## Project Structure
+
+```
+backend/
+  app/
+    main.py           # FastAPI app instance and all live route handlers (/health, /tasks*, /activity)
+    models.py          # Pydantic models/enums: TaskStatus, TaskPriority, TaskCreate, TaskUpdate, TaskResponse, Activity, ActivityType
+    business_rules.py  # validate_status_transition — the allowed Kanban status graph
+    storage.py          # In-memory task store + activity log (module-level dict, no persistence)
+    utils.py             # Small helpers (trim_title; currently unused — see limitations)
+    routes/tasks.py       # Unused APIRouter skeleton, not mounted on the app
+    schemas.py             # Older, unused TaskCreate/TaskUpdate/TaskRead models (dead code)
+    static/                 # Reserved, currently empty
+  tests/
+    conftest.py          # Shared fixtures; autouse in-memory storage reset
+    test_tasks.py          # pytest suite for /tasks and /activity
+frontend/
+  index.html             # Self-contained Kanban board + activity-log modal (HTML/CSS/JS, no build step)
+docs/
+  midcourse/              # ADRs, user stories, prompt log, reflection from an earlier course milestone
+  release-evidence.md       # Manual verification notes (local run, tests, Docker, CI)
+tests/
+  verify_a.py               # Standalone ad-hoc validation script, not part of the pytest suite
+Dockerfile                  # Two-stage build, non-root runtime user, built-in HEALTHCHECK
+.dockerignore
+.github/workflows/ci.yml    # CI: checkout, setup Python 3.10.12, install deps, pytest -v
+requirements.txt
+.env.example
+CLAUDE.md                   # Guidance for AI coding agents working in this repo
+README.md
+```
+
+## Project Conventions and Current Limitations
+
+- **In-memory storage only.** All tasks and activity log entries live in a
+  module-level dict in `backend/app/storage.py`. Restarting the server or
+  container clears all data. `[VERIFY]` an earlier draft of this README
+  described planned JSON-file persistence; reading `storage.py` confirms
+  that was never implemented — there is no file I/O of any kind here.
+- **No authentication.** Every endpoint is open; this app is not meant to
+  be exposed beyond local/trusted use.
+- **No production deployment.** The Dockerfile produces a runnable local
+  image, but there is no orchestration, TLS, secrets management, or
+  scaling story — do not treat this as production-ready.
+- **Single-user, non-concurrent design.** Task status transitions and
+  activity logging assume one user at a time; there are no safeguards
+  against concurrent writes.
+- **Status transitions are restricted**, enforced in
+  `backend/app/business_rules.py`: only `ToDo → InProgress`,
+  `InProgress → Done`, and `InProgress → ToDo` are allowed. Status changes
+  are meant to be driven by moving cards on the board, not a free dropdown.
+- **CORS is restricted** to `http://localhost:8080` and
+  `http://127.0.0.1:8080` in `backend/app/main.py` — update it if you serve
+  the frontend elsewhere.
+- **Some files are dead code**: `backend/app/schemas.py` and
+  `backend/app/routes/tasks.py` are leftovers from early scaffolding and
+  are not imported or mounted anywhere live.
+- See [`CLAUDE.md`](CLAUDE.md) for a fuller architecture map, aimed at AI
+  coding agents working in this repo.
+
+## Related Docs
+
+- [`docs/midcourse/mini-adr.md`](docs/midcourse/mini-adr.md) — architecture
+  decision records for this project (e.g. assignee search design, activity
+  log data structure). This repo has no separate `docs/decisions/` folder;
+  `mini-adr.md` is the closest equivalent.
+- [`docs/midcourse/user-stories.md`](docs/midcourse/user-stories.md),
+  [`docs/midcourse/prompt-log.md`](docs/midcourse/prompt-log.md),
+  [`docs/midcourse/reflection.md`](docs/midcourse/reflection.md),
+  [`docs/midcourse/verification.md`](docs/midcourse/verification.md) —
+  supporting notes from an earlier course milestone.
+- [`docs/release-evidence.md`](docs/release-evidence.md) — manual
+  verification log for this branch (local run, tests, Docker, CI).
 
 ## Final Project
 Branch reviewed: final-project
