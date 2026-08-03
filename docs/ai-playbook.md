@@ -21,8 +21,8 @@
 ## 4. My review rules
 
 - Ensure AI tool is capable of reading the contents of documents specified and not just making assumptions based on the document's name or past interaction. In several occasions, code implementing new endpoints was placed in a file named "tasks.py" under a folder called "routes" which is actually unused with the file named "main.py" holding all endpoint related code.
-- Ensure AI is somewhat adhering to the constraints specified in a prompt. It seldom ignore one or 2 constraints which can complicate the review process.
-- Avoid long conversations or threads that can create clutter and confusing output from AI tools. Starting new threads or conversations can reap more focused output that is easier to review.
+- Avoid long conversations or threads that can create clutter and confusing output from AI tools. Starting new threads or conversations can reap more focused output that is easier to review. In one occasion, previously specified constraints were used with a more recent prompt.
+- Use AI to help in classification and triage of multiple items in question. This helps in sorting out which issues require immediate attention and which can be left for later or even ignored. For example, Codex was used in the last module of the course to carry out triage on security concerns put forward by it.
 
 ## 5. What I am still figuring out
 
@@ -31,15 +31,9 @@
 
 ## Decision Card
 
-- For a new feature I reach for: **CortexIDE/ChatGPT**
-- For a code review I reach for: **Github Copilot/Claude Code**
+- For a new feature I reach for: **ChatGPT**
+- For a code review I reach for: **Github Copilot/CortexIDE**
 - For debugging I reach for: **Github Copilot**
 - For infrastructure I reach for: **Claude Code**
-- I will never paste private or personal information into an AI tool. A list to include _all_ such things isn't possible; but it can include:
-  - Full names of actual people.
-  - Business roles of named people and the names of organizations where they work.
-  - Addresses and contact information such as emails and phone numbers.
-  - Passwords, security tokens, 2FA codes and any authentication related codes or strings.
-  - Proprietary technical details or code that is not meant to be publicly available.
-  - Anything described in an NDA signed by a user of the AI tool.
+- I will never paste private or personal information into an AI tool. A list to include _all_ such things isn't possible; but it can include: full names of actual people, their business roles the names of their employers, addresses and contact information such as emails and phone numbers, passwords, security tokens, 2FA codes and any authentication related codes or strings, proprietary technical details or code that is not meant to be publicly available and anything described in an NDA signed by a user of the AI tool.
 - My one rule is: I'm the boss. I must take full responsibility for the outcomes of how I use AI. I should never come off blaming AI for any mishap provided I'm careful with the way I use it and always review, test & verify the AI results.
