@@ -250,5 +250,8 @@ docker rm -f tt-prod
 
 ### AI assistance summary
 AI helped draft or review: docs.
+
 I verified the work by: manual scan.
-One AI suggestion I rejected or corrected: [brief note].
+
+One AI suggestion I rejected or corrected:
+Modify the docstring for the create_task function in storage.py to indicate that what may be raised is not an HTTPException from Pydantic but a RequestValidationError originating from FastAPI. It is not rejected but deemed unnecessary for the time being.
